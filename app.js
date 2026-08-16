@@ -33,7 +33,10 @@ resize();
 
 function showGlyphs(glyphs, onDone) {
   stopAnim();
-  const gs = glyphs.map(g => ({ coeffs: (g.coeffs||[]).slice(0, HARM_VIS), trace: EPI.tracePoints((g.coeffs||[]).slice(0, HARM_VIS), 200) }));
+  const gs = glyphs.map(g => {
+    const coeffs = (g.coeffs||[]).slice(0, HARM_VIS);
+    return { coeffs, trace: EPI.tracePoints(coeffs, 300) };
+  });
   animState = { glyphs: gs, start: performance.now(), onDone: onDone || null };
   animStart = animState.start;
   loop();
@@ -45,11 +48,11 @@ function stopAnim() {
   animState = null;
 }
 
-// Reveal ~1 letter / 900ms; each letter animates ~drawMs then holds.
-const DRAW_MS = 700;
-const PER_LETTER = 850;
+// Each letter revolves once (drawMs) then holds as a dimmed trace.
+const DRAW_MS = 1200;      // one full epicycle revolution per letter
+const PER_LETTER = 1300;
 const CELL_FRAC = 0.85;
-const HARM_VIS = 10;   // harmonics used for the visual (matches tuner sweet spot)
+const HARM_VIS = 10;       // harmonics used for the visual (matches tuner sweet spot)
 
 function loop() {
   const st = animState;
@@ -68,13 +71,15 @@ function loop() {
 
   ctx.clearRect(0,0,W,H);
 
-  // each letter i has its own reveal window [i, i+1]*PER_LETTER
+  // each letter i has its own revolution window [i, i+1]*PER_LETTER
   for (let i=0;i<n;i++){
     const g = st.glyphs[i];
-    const ws = i*PER_LETTER;            // reveal start
+    const ws = i*PER_LETTER;                 // reveal start
     if (elapsed < ws) continue;
-    const prog = (elapsed - ws) / DRAW_MS;   // 0..1 while drawing
+    const prog = (elapsed - ws) / DRAW_MS;   // 0..1 during its revolution
     const frac = Math.min(1, prog);
+    const t = frac % 1;                       // revolution phase [0,1) — the rotating chain
+
     const row = Math.min(rows-1, Math.floor(i / fitsPerRow));
     const col = i % fitsPerRow;
     const lettersInRow = Math.min(fitsPerRow, n - row*fitsPerRow);
@@ -83,9 +88,9 @@ function loop() {
     const cx = rowX0 + col*box*1.7 + box/2;
     const cy = margin + row*rowH + rowH/2;
 
-    ctx.globalAlpha = frac >= 1 ? 0.6 : 1;
+    // TRUE Fourier frame: rotating chain + the trace its tip is laying down.
     const color = frac < 1 ? '#00FFFF' : '#ffffff';
-    EPI.tracePath(ctx, g.trace, cx, cy, box, color, frac);
+    EPI.drawEpicycleFrame(ctx, g.coeffs, g.trace, t, cx, cy, box, color, frac);
   }
 
   ctx.globalAlpha = 1;
@@ -94,7 +99,7 @@ function loop() {
     raf = requestAnimationFrame(loop);
   } else {
     const cb = st.onDone;
-    animState = null; // hold message on screen until next action clears canvas
+    animState = null;
     if (cb) cb();
   }
 }

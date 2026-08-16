@@ -1,8 +1,7 @@
-// Epicycle renderer. Draws a chain of rotating phasors (Fourier epicycles)
-// whose vector sum traces the glyph. Pure canvas, hair-thin strokes.
+// Epicycle renderer — TRUE Fourier visualization. The phasor chain revolves in
+// real time and its tip lays down the trace of the glyph. Not a pre-rendered blob.
 
-// Coefficients: [{k, amp, phase}, ...].
-// t: time in [0,1). Returns relative tip (pre-scale/pre-translate).
+// Coeffs: [{k, amp, phase}] with SIGNED integer k (see bake). t in [0,1).
 export function epicyclePoint(coeffs, t) {
   let x = 0, y = 0;
   for (const h of coeffs) {
@@ -13,92 +12,72 @@ export function epicyclePoint(coeffs, t) {
   return { x, y };
 }
 
-// Compute full closed trace (res+1 points) for one glyph, on a unit box.
-export function tracePoints(coeffs, res = 200) {
+// Precompute full normalized closed trace (res+1 pts).
+export function tracePoints(coeffs, res = 240) {
   const pts = [];
   for (let i = 0; i <= res; i++) {
     const p = epicyclePoint(coeffs, i/res);
-    // normalize so the glyph spans ~[-0.5,0.5] box (keeps aspect)
     pts.push([p.x, p.y]);
   }
   return pts;
 }
 
-// Convert a cached trace into the drawing pixels (fit boxW x boxH, centred at cx,cy).
-export function tracePath(ctx, trace, cx, cy, box, color, frac=1) {
-  // compute bbox of trace to scale uniformly
-  let minx=Infinity,maxx=-Infinity,miny=Infinity,maxy=-Infinity;
-  for (let i=0;i<trace.length;i++){ const [x,y]=trace[i];
-    if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y; }
+// Uniform scale + offset mapping a trace onto a box centred at (cx,cy).
+function transformOf(trace, cx, cy, box) {
+  let minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;
+  for (const [x,y] of trace){ if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y; }
   const span = Math.max(maxx-minx, maxy-miny) || 1;
-  const s = (box*0.9)/span;
+  const s = (box*0.85)/span;
   const ox = cx - (minx+maxx)/2*s;
   const oy = cy - (miny+maxy)/2*s;
-  ctx.strokeStyle = color; ctx.lineWidth = 0.5;
+  return { s, ox, oy };
+}
+
+// Draw the swept trace (message) up to fraction frac, hair-thin.
+export function drawTraceFrac(ctx, trace, cx, cy, box, color, frac=1) {
+  drawTraceFracT(ctx, trace, transformOf(trace, cx, cy, box), color, frac);
+}
+
+// Full faithful frame: rotating chain (live) + swept trace, both aligned.
+//   t: revolution phase [0,1); frac: 0..1 how much of the letter is drawn.
+export function drawEpicycleFrame(ctx, coeffs, trace, t, cx, cy, box, color, frac=1) {
+  // one shared transform so the chain tip lands exactly on the trace
+  const tr = transformOf(trace, cx, cy, box);
+  drawTraceFracT(ctx, trace, tr, color, frac);
+  drawChainT(ctx, coeffs, t, tr, color, 0.4);
+}
+
+function drawTraceFracT(ctx, trace, tr, color, frac=1) {
+  const { s, ox, oy } = tr;
+  ctx.strokeStyle = color; ctx.lineWidth = 0.5; ctx.globalAlpha = 1;
+  const n = Math.max(2, Math.round(trace.length * Math.min(1, frac)));
   ctx.beginPath();
-  const nPts = Math.max(2, Math.round(trace.length*frac));
-  for (let i=0;i<nPts;i++){
-    const [x,y]=trace[i];
-    const dx=ox+x*s, dy=oy+y*s;
+  for (let i=0;i<n;i++){
+    const dx=ox+trace[i][0]*s, dy=oy+trace[i][1]*s;
     if (i===0) ctx.moveTo(dx,dy); else ctx.lineTo(dx,dy);
   }
   ctx.closePath();
   ctx.stroke();
-  return { span, s, ox, oy };
 }
 
-// Scale: max harmonic-amplitude sum -> fit canvas.
-export function fitScale(coeffs, radius) {
-  let sum = 1e-9;
-  for (const h of coeffs) sum += h.amp;
-  return (radius || 200) * 0.55 / sum; // leave headroom
-}
-
-// Draw the epicycle chain at time t (circles + radius arms + tip).
-export function drawEpicycles(ctx, coeffs, t, cx, cy, scale, color) {
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 0.5;
-  // precompute rotating vectors
-  const vecs = [];
+function drawChainT(ctx, coeffs, t, tr, color, alpha) {
+  const { s, ox, oy } = tr;
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 0.5;
+  ctx.globalAlpha = alpha;
+  // chain origin is the trace box centre (ox,oy == centre + 0 offset since centre at box centre)
+  let px = ox, py = oy;
   for (const h of coeffs) {
     const a = 2*Math.PI*h.k*t + h.phase;
-    vecs.push({ x: h.amp*Math.cos(a), y: h.amp*Math.sin(a) });
-  }
-  let px = cx, py = cy;
-  for (let i=0;i<vecs.length;i++){
-    const endx = px + vecs[i].x*scale;
-    const endy = py - vecs[i].y*scale;
-    // guide circle
+    const vx = h.amp*Math.cos(a)*s, vy = h.amp*Math.sin(a)*s;
     ctx.beginPath();
-    ctx.arc(px, py, Math.hypot(vecs[i].x, vecs[i].y)*scale, 0, 2*Math.PI);
+    ctx.arc(px, py, Math.hypot(vx, vy), 0, 2*Math.PI);
     ctx.stroke();
-    // radius arm
     ctx.beginPath();
     ctx.moveTo(px, py);
-    ctx.lineTo(endx, endy);
+    ctx.lineTo(px+vx, py-vy);
     ctx.stroke();
-    px = endx; py = endy;
+    px += vx; py -= vy;
   }
-  // tip
-  ctx.beginPath();
-  ctx.arc(px, py, 2, 0, 2*Math.PI);
-  ctx.fill();
-  return { x: px, y: py };
-}
-
-// Draw the fully-traced glyph (closed loop) as a hairline stroke.
-export function drawClosedGlyph(ctx, coeffs, cx, cy, scale, color, tStart=0, tEnd=1, res=240) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 0.5;
-  ctx.beginPath();
-  const n = Math.max(2, Math.round(res*(tEnd-tStart)));
-  for (let i=0;i<=n;i++){
-    const t = tStart + (tEnd-tStart)*i/n;
-    const p = epicyclePoint(coeffs, t);
-    const dx = cx + p.x*scale, dy = cy - p.y*scale;
-    if (i===0) ctx.moveTo(dx,dy); else ctx.lineTo(dx,dy);
-  }
-  ctx.closePath();
-  ctx.stroke();
+  ctx.beginPath(); ctx.arc(px, py, 2, 0, 2*Math.PI); ctx.fill();
+  ctx.globalAlpha = 1;
 }

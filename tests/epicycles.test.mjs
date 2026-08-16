@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert/strict';
 import { test } from 'node:test';
-import { epicyclePoint, tracePoints, fitScale } from '../js/epicycles.js';
+import { epicyclePoint, tracePoints } from '../js/epicycles.js';
 
 const coeffs = [
   {k:1, amp:0.684, phase:0.0},
@@ -20,7 +20,10 @@ test('tracePoints produces res+1 points', () => {
   assert.equal(pts.length, 101);
 });
 
-test('fitScale positive and finite', () => {
-  const s = fitScale(coeffs, 200);
-  assert.ok(Number.isFinite(s) && s > 0);
+test('signed coeffs: loop closes and concavity bins allowed', () => {
+  const signed = [{k:1,amp:0.5,phase:0},{k:-2,amp:0.2,phase:1},{k:3,amp:0.1,phase:-2}];
+  const p0 = epicyclePoint(signed, 0);
+  const p1 = epicyclePoint(signed, 1);
+  assert.ok(Number.isFinite(p0.x) && Math.abs(p0.x-p1.x)<1e-9);
+  assert.ok(Math.abs(p0.y-p1.y)<1e-9);
 });
