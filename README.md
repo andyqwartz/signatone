@@ -1,10 +1,11 @@
-# SINE GHOST FILE
+# SIGNATONE
 
-Transmission is a lie. The exchange is therefore a proof.
+The sound is the form.
 
 Every grapheme is disarticulated along a closed contour and resolved into a
 rotating basis — a finite set of phasors whose coherent superpositions trace
 the letter back into visibility. What travels is not the mark but its spectrum.
+A signature, carried by a tone.
 
 ---
 
@@ -39,14 +40,21 @@ preambular oscillator. No leakage is invited; none is windowed away.
 ## Weave & See
 
 Key in, it becomes signal. The signal becomes spectacle: epicycles that turn,
-ands of phasors, the letter assembling itself out of accumulated rotation —
-an encryption that draws its own decryption.
+hands of phasors, the letter assembling itself out of accumulated rotation —
+an encryption that draws its own decryption. A single word stays on one line,
+auto-scaled and centered; long messages wrap to fill the stage, rendered fast
+on a persisted layer.
+
+## Stealth
+
+A pasted PGP armor block is detected invisibly: it is woven to WAV and
+downloaded with a quiet confirmation — **no trace is drawn**.
 
 ## blocs
 
-- `js/`        — resonator (...), weaver (...), alphabet
+- `js/`        — resonator (seer), weaver, alphabet, layout (pure), epicycles
 - `tools/`     — the bake: contour → coefficients
-- `test/`      — the-arbitur
+- `test/`      — the arbiter (22 tests)
 
 ## state
 
