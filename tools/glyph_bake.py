@@ -1,95 +1,87 @@
 """
 glyph_bake.py — Bakes the SGF alphabet JSON from real bubble-font glyphs.
 
-Pipeline:
-  1. Render each capital A-Z in "Arial Rounded Bold" (a true bubble font) on a
-     padded image.
-  2. Extract the OUTER closed silhouette boundary via Moore contour tracing
-     (single loop; internal holes are intentionally ignored — the epicycle
-     chain draws the outer bubble silhouette, which stays recognizable).
-  3. Centre at origin, normalise to ~[-1,1].
-  4. DFT (numpy rfft) k=1..N -> store [{k, amp, phase}].
-  5. Write js/alphabet.json as {"A":[...], "Z":[...], "letterSet":[...]}.
+Pipeline (PROVEN-code faithful — full DFT, no harmonic truncation):
+  1. Render each capital A-Z in "Arial Rounded Bold" (true bubble font).
+  2. Extract the OUTER boundary via skimage.find_contours (faithful filled shape,
+     unlike naive row-scan which flattened concavities and killed legibility).
+  3. Centre at origin + normalise.
+  4. FULL complex-FFT of z=x+iy (keeps both axes) — store ALL harmonics up to N.
+  5. Write js/alphabet.json as {"A":[...], "letterSet":[...]}.
 
-Dependencies (dev only, offline bake): Pillow, numpy.
+Deps (dev only, offline bake): Pillow, numpy, scikit-image.
 Run: python3 tools/glyph_bake.py
 """
-import math, json, os
+import json, math, os
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
+from skimage import measure
 
 FONT_PATH = "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf"
 SIZE = 400
-PAD = 30
-N_HARM = 32   # harmonics stored (k=1..32)
+N_HARM = 128      # harmonics kept (k=1..N_HARM) — high for legibility; audible top = N_HARM*f0 < Nyquist
 
 
 def render_glyph(ch, font):
-    """Render char on square RGBA; return numpy mask bool."""
     img = Image.new("L", (SIZE, SIZE), 0)
     d = ImageDraw.Draw(img)
     bbox = d.textbbox((0, 0), ch, font=font)
     w = bbox[2]-bbox[0]; h = bbox[3]-bbox[1]
-    x = (SIZE-w)/2 - bbox[0]
-    y = (SIZE-h)/2 - bbox[1]
-    d.text((x, y), ch, fill=255, font=font)
+    d.text(((SIZE-w)/2 - bbox[0], (SIZE-h)/2 - bbox[1]), ch, fill=255, font=font)
     return np.array(img) > 128
 
 
-def trace_outer_boundary(mask):
-    """Row-scan outer silhouette boundary (single closed loop).
-    For each row take leftmost & rightmost foreground pixel -> the outer contour,
-    which naturally ignores internal holes (bubble letters 'b', 'A', 'P'...).
-    Returns a closed polyline ordered around the shape (L->R going down, R->L going up)."""
-    H, W = mask.shape
-    left = {}
-    right = {}
-    for y in range(H):
-        row = mask[y]
-        xs = np.where(row)[0]
-        if len(xs):
-            left[y] = int(xs[0])
-            right[y] = int(xs[-1])
-    ys = sorted(left.keys())
-    if not ys:
+def outer_boundary(mask, resample=300):
+    """Composed closed path = OUTER loop + each HOLE loop, concatenated into ONE
+    closed curve. This is what makes bubble letters (O, B, A, P, G...) legible:
+    a single epicycle chain draws the outer ring, jumps into each interior hole,
+    and back — reproducing the true filled-glyph silhouette. (row-scan flattening
+    was the legibility killer.)"""
+    contours = measure.find_contours(mask, 0.5)
+    if not contours:
         return []
-    top, bottom = ys[0], ys[-1]
-    # bottom pass: go left->right along bottom row (shared vertices)
-    x0, x1 = left[bottom], right[bottom]
-    pts = []
-    for x in range(x0, x1+1):
-        pts.append((x, bottom))
-    # left side bottom->top
-    for y in ys[:0:-1]:  # bottom..top
-        pts.append((left[y], y))
-    # top row right->left
-    for x in range(right[top], left[top]-1, -1):
-        pts.append((x, top))
-    # right side top->bottom (skip bottom corner)
-    for y in ys[1:]:
-        pts.append((right[y], y))
-    return pts
+    # largest loop = outer boundary; the rest = interior holes
+    contours.sort(key=len, reverse=True)
+    outer = contours[0]
+    holes = contours[1:]
+    seq = [(float(p[1]), float(p[0])) for p in outer]   # (x, y), clockwise-ish
+    for h in holes:
+        seq.extend([(float(p[1]), float(p[0])) for p in h])
+    return uniform_resample(seq, resample)
 
 
-def simplify(pts, keep=512):
-    """Uniformly resample closed contour to keep points."""
-    if len(pts) <= keep:
+def uniform_resample(pts, n):
+    """Resample a polyline into n points by cumulative length (jump lines get
+    proportional samples, so connecting strokes stay thin)."""
+    if len(pts) < 2:
         return pts
+    lens = [0.0]
+    for i in range(1, len(pts)):
+        x0, y0 = pts[i-1]; x1, y1 = pts[i]
+        lens.append(lens[-1] + math.hypot(x1-x0, y1-y0))
+    L = lens[-1]
+    if L <= 0:
+        return [pts[0]]*n
     out = []
-    total = len(pts)
-    for m in range(keep):
-        out.append(pts[int(m*total/keep)])
+    j = 0
+    for m in range(n):
+        target = L*m/(n-1)
+        while j < len(lens)-2 and lens[j+1] < target:
+            j += 1
+        seg = lens[j+1]-lens[j]
+        t = (target-lens[j])/seg if seg > 0 else 0
+        x0, y0 = pts[j]; x1, y1 = pts[j+1]
+        out.append((x0+(x1-x0)*t, y0+(y1-y0)*t))
     return out
 
 
-def dft_harms(points, n):
-    """DFT of a closed 2D path -> list of {k, amp, phase} for k=1..n.
-    z = x + iy; full complex FFT preserves both axes."""
+def dft_all(points):
+    """Full complex DFT (z=x+iy). Returns dict k -> complex coeff for k=1..N_HARM."""
     z = np.array([complex(float(px), float(py)) for px, py in points])
-    N = len(z)
-    X = np.fft.fft(z) / N
+    M = len(z)
+    X = np.fft.fft(z) / M
     out = []
-    for k in range(1, n+1):
+    for k in range(1, N_HARM+1):
         c = X[k] if k < len(X) else 0+0j
         out.append({"k": k, "amp": round(float(abs(c)), 6), "phase": round(float(math.atan2(c.imag, c.real)), 6)})
     return out
@@ -99,30 +91,24 @@ def normalize_pts(pts):
     xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
     cx = (min(xs)+max(xs))/2; cy = (min(ys)+max(ys))/2
     scale = max((max(xs)-min(xs)), (max(ys)-min(ys))) or 1.0
-    norm = []
-    for x, y in pts:
-        norm.append(((x - cx)/scale*1.8, (y - cy)/scale*1.8))
-    return norm
+    return [((x-cx)/scale*1.8, (y-cy)/scale*1.8) for x, y in pts]
 
 
 def main():
-    font = ImageFont.truetype(FONT_PATH, 280)
     alphabet = {}
+    font = ImageFont.truetype(FONT_PATH, 280)
     for i in range(26):
         ch = chr(ord('A') + i)
-        mask = render_glyph(ch, font)
-        pts = trace_outer_boundary(mask)
-        pts = simplify(pts, 192)
-        pts = normalize_pts(pts)
-        alphabet[ch] = dft_harms(pts, N_HARM)
-        print(f"{ch}: boundary {len(pts)} pts -> {len(alphabet[ch])} harms")
+        pts = normalize_pts(outer_boundary(render_glyph(ch, font), 300))
+        alphabet[ch] = dft_all(pts)
+        nz = sum(1 for h in alphabet[ch] if h['amp'] > 0.005)
+        print(f"{ch}: {len(pts)} pts, {len(alphabet[ch])} harms, {nz} significant")
     alphabet["letterSet"] = [chr(ord('A')+i) for i in range(26)]
     os.makedirs("js", exist_ok=True)
     with open("js/alphabet.json", "w") as f:
         json.dump(alphabet, f)
-    print(f"Wrote js/alphabet.json with {len(alphabet)} letters")
+    print(f"Wrote js/alphabet.json ({len(alphabet)} letters, {N_HARM} harmonics each)")
 
 
 if __name__ == "__main__":
-    import json
     main()

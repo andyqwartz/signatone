@@ -19,7 +19,8 @@ const msgEl = document.getElementById('msg');
 const fileEl = document.getElementById('file');
 
 let raf = null;
-let animState = null; // { glyphs: [{coeffs, color}], t-phase }
+let animState = null; // { glyphs: [{coeffs, trace}], start }
+let animStart = 0;
 
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -31,9 +32,10 @@ window.addEventListener('resize', resize);
 resize();
 
 function showGlyphs(glyphs) {
-  // glyphs: [{coeffs, label}] -> animate epicycles+traces for all
   stopAnim();
-  animState = { glyphs, t: 0 };
+  const gs = glyphs.map(g => ({ coeffs: g.coeffs, trace: EPI.tracePoints(g.coeffs, 200) }));
+  animState = { glyphs: gs, start: performance.now() };
+  animStart = animState.start;
   loop();
 }
 
@@ -43,40 +45,55 @@ function stopAnim() {
   animState = null;
 }
 
+// Reveal ~1 letter / 900ms; each letter animates ~drawMs then holds.
+const DRAW_MS = 700;
+const PER_LETTER = 850;
+const CELL_FRAC = 0.85;
+
 function loop() {
   const st = animState;
   if (!st) return;
   const W = innerWidth, H = innerHeight;
-  ctx.clearRect(0, 0, W, H);
-
   const n = st.glyphs.length;
-  const per = Math.min(W, H) * 0.16;
+  const margin = Math.min(W,H)*0.09;
+  const elapsed = performance.now() - st.start;
 
-  // fade past letters (already-traced glyphs)
+  // adaptive layout: wrap letters into rows that fit width
+  const cellBox = Math.min(W, H)*0.20;
+  const fitsPerRow = Math.max(1, Math.floor((W-2*margin) / (cellBox*1.7)));
+  const rows = Math.ceil(n / Math.max(1, fitsPerRow));
+  const rowH = (H - 2*margin) / rows;
+  const box = Math.min(cellBox, rowH*CELL_FRAC);
+
+  ctx.clearRect(0,0,W,H);
+
+  // each letter i has its own reveal window [i, i+1]*PER_LETTER
   for (let i=0;i<n;i++){
     const g = st.glyphs[i];
-    const cx = W/2 + (i - (n-1)/2) * (W*0.20);
-    const cy = H/2;
-    const s = EPI.fitScale(g.coeffs, per);
-    const prog = Math.min(1.0, (n === 1 ? st.t : (n*st.t - i) * 3));
-    if (prog <= 0) continue;
-    ctx.globalAlpha = i === n-1 ? 1 : 0.55;
-    EPI.drawClosedGlyph(ctx, g.coeffs, cx, cy, s, i === n-1 ? '#00FFFF' : '#ffffff', 0, prog);
+    const ws = i*PER_LETTER;            // reveal start
+    if (elapsed < ws) continue;
+    const prog = (elapsed - ws) / DRAW_MS;   // 0..1 while drawing
+    const frac = Math.min(1, prog);
+    const row = Math.min(rows-1, Math.floor(i / fitsPerRow));
+    const col = i % fitsPerRow;
+    const lettersInRow = Math.min(fitsPerRow, n - row*fitsPerRow);
+    const rowW = lettersInRow * (box*1.7);
+    const rowX0 = W/2 - rowW/2;
+    const cx = rowX0 + col*box*1.7 + box/2;
+    const cy = margin + row*rowH + rowH/2;
+
+    ctx.globalAlpha = frac >= 1 ? 0.6 : 1;
+    const color = frac < 1 ? '#00FFFF' : '#ffffff';
+    EPI.tracePath(ctx, g.trace, cx, cy, box, color, frac);
   }
 
-  // live rotating chain on the active (last) letter
-  const last = st.glyphs[n-1];
-  if (last) {
-    const cx = W/2 + ((n-1) - (n-1)/2)*W*0.20;
-    const cy = H/2;
-    const s = EPI.fitScale(last.coeffs, per);
-    ctx.globalAlpha = 1;
-    EPI.drawEpicycles(ctx, last.coeffs, st.t % 1, cx, cy, s, '#00FFFF');
-  }
   ctx.globalAlpha = 1;
-
-  st.t += 0.0025;
-  raf = requestAnimationFrame(loop);
+  const done = elapsed > (n-1)*PER_LETTER + DRAW_MS + 800;
+  if (!done) {
+    raf = requestAnimationFrame(loop);
+  } else {
+    animState = null; // hold message on screen until next action clears canvas
+  }
 }
 
 function setStatus(s) { statusEl.textContent = `— ${s}`; }

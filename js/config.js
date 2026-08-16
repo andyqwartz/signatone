@@ -2,8 +2,8 @@
 export const SGFConfig = {
   sampleRate: 48000,
   f0: 102,
-  N: 32,
-  blockMs: 90,
+  N: 128,        // full harmonic set (no truncation — kept for legibility)
+  blockMs: 120,
   markMs: 60,
   preMs: 60,
   gain: 0.2,

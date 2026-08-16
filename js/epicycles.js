@@ -13,11 +13,38 @@ export function epicyclePoint(coeffs, t) {
   return { x, y };
 }
 
-// Compute full closed trace (res+1 points) for one glyph.
-export function tracePoints(coeffs, res = 240) {
+// Compute full closed trace (res+1 points) for one glyph, on a unit box.
+export function tracePoints(coeffs, res = 200) {
   const pts = [];
-  for (let i = 0; i <= res; i++) pts.push(epicyclePoint(coeffs, i/res));
+  for (let i = 0; i <= res; i++) {
+    const p = epicyclePoint(coeffs, i/res);
+    // normalize so the glyph spans ~[-0.5,0.5] box (keeps aspect)
+    pts.push([p.x, p.y]);
+  }
   return pts;
+}
+
+// Convert a cached trace into the drawing pixels (fit boxW x boxH, centred at cx,cy).
+export function tracePath(ctx, trace, cx, cy, box, color, frac=1) {
+  // compute bbox of trace to scale uniformly
+  let minx=Infinity,maxx=-Infinity,miny=Infinity,maxy=-Infinity;
+  for (let i=0;i<trace.length;i++){ const [x,y]=trace[i];
+    if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y; }
+  const span = Math.max(maxx-minx, maxy-miny) || 1;
+  const s = (box*0.9)/span;
+  const ox = cx - (minx+maxx)/2*s;
+  const oy = cy - (miny+maxy)/2*s;
+  ctx.strokeStyle = color; ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  const nPts = Math.max(2, Math.round(trace.length*frac));
+  for (let i=0;i<nPts;i++){
+    const [x,y]=trace[i];
+    const dx=ox+x*s, dy=oy+y*s;
+    if (i===0) ctx.moveTo(dx,dy); else ctx.lineTo(dx,dy);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  return { span, s, ox, oy };
 }
 
 // Scale: max harmonic-amplitude sum -> fit canvas.
