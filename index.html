@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SINE GHOST FILE</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <canvas id="stage"></canvas>
+
+  <header class="hud">
+    <h1 class="title">SINE&nbsp;GHOST&nbsp;FILE</h1>
+    <p class="sub">transmission is a lie — the exchange is a proof</p>
+  </header>
+
+  <main class="command">
+    <section class="panel weave">
+      <label for="msg">plaintext</label>
+      <textarea id="msg" spellcheck="false" autocomplete="off" placeholder="HELLO"></textarea>
+      <button id="btn-weave">Weave &amp; Download</button>
+    </section>
+
+    <section class="panel see">
+      <label for="file">signal</label>
+      <input type="file" id="file" accept=".wav,audio/wav">
+      <button id="btn-see">Upload &amp; See</button>
+    </section>
+  </main>
+
+  <div class="status" id="status">—</div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
