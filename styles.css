@@ -131,21 +131,24 @@ button:hover {
   z-index: 2;
 }
 
-/* hidden configuration panel — revealed by triple-click on the title or ◈ button */
+/* hidden configuration panel — revealed by the gear button (top-right) */
 .settings-toggle {
   position: fixed;
-  top: 22px;
-  right: 26px;
+  top: 20px;
+  right: 22px;
   z-index: 25;
-  width: 30px; height: 30px;
-  background: transparent;
-  border: var(--hair) solid var(--dim);
-  color: var(--dim);
-  font-size: 13px;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: rgba(5,5,5,0.5);
+  border: var(--hair) solid rgba(255,255,255,0.28);
+  color: rgba(255,255,255,0.55);
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+  transition: color 0.25s, border-color 0.25s, box-shadow 0.25s;
 }
-.settings-toggle:hover { color: var(--ink); border-color: var(--ink); }
+.settings-toggle:hover { color: var(--ink); border-color: var(--ink); box-shadow: 0 0 10px rgba(0,255,255,0.18); }
+.settings-toggle svg { display: block; }
 
 .hidden-panel {
   position: fixed;
