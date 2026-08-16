@@ -1,0 +1,42 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #050505; --ink: #00FFFF; --ink2: #fff; --dim: rgba(255,255,255,.4);
+}
+html, body { background: var(--bg); color: var(--ink2); height: 100%; overflow: hidden;
+  font: 300 13px "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .06em; }
+
+.tuner-hud { position: fixed; top: 20px; left: 24px; z-index: 5; }
+.tuner-hud h1 { font-size: 18px; font-weight: 300; letter-spacing: .25em; color: var(--ink); }
+.tuner-hud .dim { color: var(--dim); }
+.letter-picker { display: flex; gap: 4px; margin-top: 12px; flex-wrap: wrap; max-width: 520px; }
+.letter-picker button { background: transparent; border: .5px solid var(--dim); color: var(--ink2);
+  width: 28px; height: 28px; cursor: pointer; font-size: 12px; font-weight: 300; }
+.letter-picker button.active { border-color: var(--ink); color: var(--ink); box-shadow: 0 0 8px rgba(0,255,255,.3); }
+
+main { position: fixed; inset: 0; display: flex; }
+.canvas-panel { flex: 1; position: relative; }
+#stage { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.probe {
+  position: absolute; bottom: 24px; right: 24px; text-align: right; pointer-events: none;
+  background: rgba(5,5,5,.55); padding: 10px 14px; border: .5px solid var(--dim);
+}
+.probe-ch { font-size: 42px; font-weight: 200; color: var(--ink); letter-spacing: .1em; }
+.probe-meta { display: block; font-size: 9px; color: var(--dim); margin-top: 4px; letter-spacing: .1em; }
+
+.controls { width: 260px; padding: 80px 22px 24px; border-left: .5px solid var(--dim);
+  overflow-y: auto; }
+.controls h2 { font-size: 10px; letter-spacing: .3em; color: var(--dim); margin-bottom: 18px; }
+.group { margin-bottom: 16px; }
+.group label { display: flex; justify-content: space-between; font-size: 10px;
+  letter-spacing: .18em; color: var(--dim); text-transform: uppercase; margin-bottom: 6px; }
+.group output { color: var(--ink2); }
+input[type=range] { width: 100%; accent-color: var(--ink); background: transparent; }
+select {
+  width: 100%; background: transparent; border: .5px solid var(--dim); color: var(--ink2);
+  padding: 6px; font-size: 11px; letter-spacing: .1em; }
+button { background: transparent; border: .5px solid var(--dim); color: var(--ink);
+  padding: 9px; width: 100%; margin-top: 8px; cursor: pointer; font-size: 10px;
+  letter-spacing: .2em; text-transform: uppercase; }
+button:hover { border-color: var(--ink); }
+.mem-note { font-size: 9px; color: var(--dim); margin-top: 10px; letter-spacing: .06em; line-height: 1.5; }
