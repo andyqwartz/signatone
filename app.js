@@ -146,16 +146,17 @@ function loop() {
   }
 
   ctx.globalAlpha = 1;
+  // Keep the sequence alive: while drawing we revolve; after drawing we stay in a
+  // hover mode where traces persist and the chain reappears on hover. We keep
+  // redrawing so letters NEVER disappear. onDone fires once, after the last letter.
   const done = elapsed > (n-1)*PER_LETTER + DRAW_MS;
-  if (!done || hoverIdx >= 0) {
-    raf = requestAnimationFrame(loop);   // keep looping while drawing OR while hover overlay active
-  } else if (animState && !animState._cbFired) {
+  if (!animState._cbFired && done) {
     animState._cbFired = true;
-    const cb = animState.onDone;
-    const lastState = animState;
-    // keep the traces on screen statically at this moment
-    if (cb) cb();
+    if (animState.onDone) animState.onDone();
   }
+  // always keep redrawing while animState exists — letters persist, chain shows
+  // while drawing or on hover, never disappears.
+  raf = requestAnimationFrame(loop);
 }
 
 function setStatus(s) { statusEl.textContent = `— ${s}`; }
@@ -244,6 +245,8 @@ titleTrig.addEventListener('click', () => {
   if (titleClicks >= 3) { panel.hidden = !panel.hidden; titleClicks = 0; if(!panel.hidden) applyControls(); }
 });
 btnClose.addEventListener('click', () => { panel.hidden = true; saveSettings(); });
+const btnSettings = document.getElementById('btn-settings');
+btnSettings.addEventListener('click', () => { panel.hidden = !panel.hidden; if(!panel.hidden) applyControls(); saveSettings(); });
 
 function applyControls() {
   oHarmo.textContent = settings.harmonics; eHarmo.value = settings.harmonics;
