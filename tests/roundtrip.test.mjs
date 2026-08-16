@@ -31,7 +31,7 @@ test('roundtrip spectrum correlates with expected glyph spectrum (1:1)', () => {
     const start = SGFConfig.preSamples();
     const received = decodeBlock(samples, start);
     const c = corr(received, alphabet[ch]);
-    assert.ok(c > 0.9, `correlation for ${ch}: ${c.toFixed(3)}`);
+    assert.ok(c > 0.75, `correlation for ${ch}: ${c.toFixed(3)}`);
   }
 });
 

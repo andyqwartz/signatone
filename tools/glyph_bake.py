@@ -19,7 +19,9 @@ from skimage import measure
 
 FONT_PATH = "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf"
 SIZE = 400
-N_HARM = 128      # harmonics kept (k=1..N_HARM) — high for legibility; audible top = N_HARM*f0 < Nyquist
+N_HARM = 128      # harmonics kept (amplitude-sorted desc, big phasors first)
+SAMPLE_RATE = 48000
+SGF_F0 = 102      # keep consistent with js/config.js f0
 
 
 def render_glyph(ch, font):
@@ -76,15 +78,33 @@ def uniform_resample(pts, n):
 
 
 def dft_all(points):
-    """Full complex DFT (z=x+iy). Returns dict k -> complex coeff for k=1..N_HARM."""
+    """PROVEN Fourier-Epicycles method (research/Fourier-Epicycles/readme.md):
+    full fftshift of the COMPLEX 2D path (z=x+iy) -> SIGNED integer bins k
+    (negative AND positive). A 2D complex path has NO conjugate symmetry, so both
+    signs are required to reproduce concavities; positive-only flattens to blobs
+    (the legibility bug fixed here).
+    amp = |c|/N (proven normalisation i.e. Xf/N). Sorted by amplitude descending
+    -> dominant phasors first, few harmonics already recognizable.
+    k capped by |k| < maxK so k*f0 stays in the audible band.
+    NOTE: rendering reconstructs z(t)=Σ c_k·e^{i2πk t} (sub-sum phasors). The audio
+    weaver emits each bin as a tone at |k|*f0 carrying amp+phase; complex-2D info
+    is carried by pairing the two bins per |k| (see js/weaver + js/seer)."""
     z = np.array([complex(float(px), float(py)) for px, py in points])
-    M = len(z)
-    X = np.fft.fft(z) / M
-    out = []
-    for k in range(1, N_HARM+1):
-        c = X[k] if k < len(X) else 0+0j
-        out.append({"k": k, "amp": round(float(abs(c)), 6), "phase": round(float(math.atan2(c.imag, c.real)), 6)})
-    return out
+    N = len(z)
+    bins = np.fft.fftshift(np.fft.fftfreq(N)) * N          # signed integer bins
+    Xf = np.fft.fftshift(np.fft.fft(z))
+    maxK = int((SAMPLE_RATE/2 - 2000) / SGF_F0)
+    coeffs = []
+    for kk in range(N):
+        k = int(round(bins[kk]))
+        if not (1 <= abs(k) <= maxK):
+            continue
+        c = Xf[kk]
+        coeffs.append({"k": k,                                   # signed bin
+                       "amp": round(float(abs(c) / N), 8),
+                       "phase": round(float(np.angle(c)), 6)})
+    coeffs.sort(key=lambda c: c["amp"], reverse=True)      # proven: amplitude order
+    return coeffs[:N_HARM]
 
 
 def normalize_pts(pts):
