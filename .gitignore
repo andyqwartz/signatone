@@ -1,0 +1,16 @@
+# Memory Bank (source de vérité cross-session — PAS versionné)
+memory-bank/
+
+# Superpowers docs (specs & plans — pas versionnés)
+docs/superpowers/
+
+# Environment
+.DS_Store
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Build / generated
+js/alphabet.json
