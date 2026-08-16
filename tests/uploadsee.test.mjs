@@ -33,6 +33,7 @@ test('full WAV file: weave->encode->decode->blocks (simulated Upload & See)', ()
   const decoded = decodeWavToFloat32(wav);
   const {blocks} = analyzeBlocks(decoded);
   assert.equal(blocks.length, 2, `expected 2 blocks for HI, got ${blocks.length}`);
-  // each block has N harmonics
-  blocks.forEach(b => assert.equal(b.coeffs.length, SGFConfig.N));
+  // each block recovers signed harmonic bins (2D)
+  blocks.forEach(b => assert.ok(b.coeffs.length > 0));
+  blocks.forEach(b => assert.ok(b.coeffs.some(d=>d.k<0), 'negative bins preserved'));
 });

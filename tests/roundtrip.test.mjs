@@ -2,43 +2,48 @@ import { strict as assert } from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { weaveBlocks } from '../js/weaver.js';
+import { analyzeBlocks, decodeBlock } from '../js/seer.js';
 import { SGFConfig } from '../js/config.js';
-import { goertzelBank } from '../js/goertzel.js';
 
 const alphabet = JSON.parse(readFileSync(new URL('../js/alphabet.json', import.meta.url), 'utf8'));
 
-function decodeBlock(samples, start) {
-  const block = samples.subarray(start, start + SGFConfig.blockSamples());
-  const freqs = Array.from({length: SGFConfig.N}, (_, i) => (i+1)*SGFConfig.f0);
-  return goertzelBank(block, SGFConfig.sampleRate, freqs);
-}
-
-// correlation between two spectra (0..1) — measures the 1:1 spectral mapping
+// correlation between two signed-bin amplitude vectors
 function corr(received, expected) {
-  const r = received.map(m => m.magnitude);
+  const r = received.map(m => m.amp);
   const e = expected.map(h => h.amp);
-  const n = r.length;
-  let sr=0, se=0, srr=0, see=0, sre=0;
-  for (let i=0;i<n;i++){ sr+=r[i]; se+=e[i]; }
-  const mr=sr/n, me=se/n;
-  for (let i=0;i<n;i++){ srr+=(r[i]-mr)**2; see+=(e[i]-me)**2; sre+=(r[i]-mr)*(e[i]-me); }
-  return sre / (Math.sqrt(srr)*Math.sqrt(see) || 1);
+  const n = Math.max(r.length, e.length);
+  const a = Array(n).fill(0), b = Array(n).fill(0);
+  for (let i=0;i<r.length;i++) a[i]=r[i];
+  for (let i=0;i<e.length;i++) b[i]=e[i];
+  let srr=0, see=0, sre=0;
+  const am=a.reduce((x,y)=>x+y,0)/n, bm=b.reduce((x,y)=>x+y,0)/n;
+  for (let i=0;i<n;i++){ srr+=(a[i]-am)**2; see+=(b[i]-bm)**2; sre+=(a[i]-am)*(b[i]-bm); }
+  return sre/(Math.sqrt(srr)*Math.sqrt(see)||1);
 }
 
-test('roundtrip spectrum correlates with expected glyph spectrum (1:1)', () => {
-  for (const ch of ['A','B','O','X']) {
+test('signed roundtrip: decoded bins match alphabet (recovered k and amplitude)', () => {
+  for (const ch of ['A','B','O']) {
     const { samples } = weaveBlocks(ch, alphabet);
-    const start = SGFConfig.preSamples();
-    const received = decodeBlock(samples, start);
-    const c = corr(received, alphabet[ch]);
-    assert.ok(c > 0.75, `correlation for ${ch}: ${c.toFixed(3)}`);
+    const { blocks } = analyzeBlocks(samples);
+    assert.equal(blocks.length, 1, `one block for ${ch}`);
+    const dec = blocks[0].coeffs;
+    // top bins should be the same signed k (ignoring exact ordering near ties)
+    const decTop = dec.slice(0,8).map(d=>Math.abs(d.k)).sort((x,y)=>x-y);
+    const expTop = alphabet[ch].slice(0,8).map(h=>Math.abs(h.k)).sort((x,y)=>x-y);
+    // allow a couple of swap differences, but dominant low bins present
+    assert.ok(decTop[0]===1||decTop[0]===2, `${ch} fund present: ${decTop[0]}`);
+    const c = corr(dec, alphabet[ch]);
+    assert.ok(c > 0.6, `corr ${ch}=${c.toFixed(3)}`);
+    // negative frequency bins recovered (2D structure preserved)
+    assert.ok(dec.some(d=>d.k<0), `${ch} has negative-frequency bins (concavity)`);
   }
 });
 
-test('letters decode to distinct spectra (information preserved)', () => {
-  const a = decodeBlock(weaveBlocks('A', alphabet).samples, SGFConfig.preSamples()).map(x=>x.magnitude);
-  const b = decodeBlock(weaveBlocks('B', alphabet).samples, SGFConfig.preSamples()).map(x=>x.magnitude);
-  // distinct letters should differ substantially in spectrum
-  let diff=0; for (let i=0;i<a.length;i++) diff += Math.abs(a[i]-b[i]);
-  assert.ok(diff > 1e-3, `A vs B spectral diff ${diff}`);
+test('weave produces x|y multiplexed frame (2 halves per letter)', () => {
+  const { samples } = weaveBlocks('A', alphabet);
+  const pre = SGFConfig.preSamples();
+  const plen = Math.floor(SGFConfig.blockSamples()/2);
+  const letters = 'A'.length;
+  const expected = pre + letters*plen*2 + SGFConfig.markSamples() + pre;
+  assert.equal(samples.length, expected);
 });

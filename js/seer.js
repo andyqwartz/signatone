@@ -1,52 +1,57 @@
-// Ghost Seer: decode audio samples into per-letter harmonic coefficients.
-// Uses a Goertzel bank at known frequencies (from config). For each letter block
-// we recover amplitude AND phase for k=1..N, producing [{k, amp, phase}] that the
-// epicycle renderer draws.
+// Ghost Seer: decode samples into signed 2D harmonic coefficients.
+// The weaver time-multiplexes each letter as [x half (Re) | y half (Im)]. We rebuild
+// the complex curve z(t)=x(t)+i·y(t), then project onto each SIGNED bin k via the
+// exact inverse correlation z(t)·e^{-i2πk·f·t} — recovering c_k = A_k·e^{iφ_k}
+// (including negative frequencies), matching the bake exactly and rendering like the
+// tuner (all 2D concavities preserved).
 
 import { SGFConfig } from './config.js';
-import { goertzelBank } from './goertzel.js';
 
-// Sample-window bit: detect presence of the preamble marker block.
-// We locate letter blocks by scanning for the marker frequency (N+3)*f0 and the
-// preamble frequency f0. Simple approach: fixed grid from the preamble — assume
-// the decoder knows the block grid (frames are deterministic). Robust enough for
-// the file-decoding path where we did the encoding.
+const maxK = () => Math.floor((SGFConfig.sampleRate/2 - 2000) / SGFConfig.f0);
+function partLen() { return Math.floor(SGFConfig.blockSamples() / 2); }
 
-function markFreq() { return (SGFConfig.N + 3) * SGFConfig.f0; }
-
-// Detect grid: find where the first preamble (strong f0 content) begins.
-// Returns the sample offset of block start.
 export function analyzeBlocks(samples) {
-  // Scan a sliding window for high f0 energy at the very start -> preamble.
   const pre = SGFConfig.preSamples();
-  const blockLen = SGFConfig.blockSamples();
+  const plen = partLen();
   const markLen = SGFConfig.markSamples();
-  const step = 480; // scan step
-
-  // Block boundaries: preamble at 0..pre. The first block starts at `pre`.
-  // We return the list of block start indices by walking the deterministic grid.
   const blocks = [];
-  let idx = pre;          // first block start
-  while (idx + blockLen <= samples.length) {
+  let idx = pre;
+  while (idx + plen*2 <= samples.length) {
     blocks.push({ start: idx, coeffs: decodeBlock(samples, idx) });
-    idx += blockLen + markLen; // next block after block+mark
+    idx += plen*2 + markLen;
   }
-  return { blocks, preSamples: pre, blockLen, markLen };
+  return { blocks, preSamples: pre, blockLen: plen*2, markLen };
 }
 
-// Decode the coefficients present in a single block window.
+// Decode one letter (x|y halves) to signed complex bins.
 export function decodeBlock(samples, start) {
-  const block = samples.subarray(start, start + SGFConfig.blockSamples());
-  const freqs = Array.from({ length: SGFConfig.N }, (_, i) => (i+1)*SGFConfig.f0);
-  const bank = goertzelBank(block, SGFConfig.sampleRate, freqs);
-  return bank.map((b, idx) => ({
-    k: idx + 1,
-    amp: b.magnitude,
-    phase: b.phaseRad,
-  }));
+  const plen = partLen();
+  const sr = SGFConfig.sampleRate;
+  const x = samples.subarray(start, start + plen);
+  const y = samples.subarray(start + plen, start + plen*2);
+  const K = maxK();
+  const coeffs = [];
+  // project complex z(t) onto each signed integer bin
+  for (let k = -K; k <= K; k++) {
+    let cr = 0, ci = 0;
+    for (let i = 0; i < plen; i++) {
+      const t = i / sr;
+      const ph = 2 * Math.PI * k * SGFConfig.f0 * t;
+      const zr = x[i], zi = y[i];
+      // z(t) * e^{-i·ph} = (zr+i·zi)(cos-ph + i·(-sin-ph))
+      const er = Math.cos(ph), ei = -Math.sin(ph);
+      cr += zr*er - zi*ei;
+      ci += zr*ei + zi*er;
+    }
+    const amp = Math.sqrt(cr*cr + ci*ci) / plen;
+    if (amp < 1e-9) continue;
+    coeffs.push({ k, amp, phase: Math.atan2(ci, cr) });
+  }
+  // proven: sort by amplitude desc (dominant strokes first)
+  coeffs.sort((a, b) => b.amp - a.amp);
+  return coeffs;
 }
 
-// Convenience: decode a full Float32Array back to glyph coefficients per letter.
-export function decodeAll(samples, sampleRate) {
+export function decodeAll(samples) {
   return analyzeBlocks(samples);
 }
