@@ -21,6 +21,17 @@ const fileEl = document.getElementById('file');
 let raf = null;
 let animState = null; // { glyphs: [{coeffs, trace}], start }
 let animStart = 0;
+let HARM_VIS = 10;          // display harmonics — overridable by hidden panel
+const SETTINGS_KEY = 'sgf.settings.v1';
+const settings = loadSettings();
+
+function loadSettings() {
+  try { return Object.assign({harmonics:10, noise:0, seed:12345}, JSON.parse(localStorage.getItem(SETTINGS_KEY))||{}); }
+  catch { return {harmonics:10, noise:0, seed:12345}; }
+}
+function saveSettings() {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {}
+}
 
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -33,8 +44,9 @@ resize();
 
 function showGlyphs(glyphs, onDone) {
   stopAnim();
+  const harmos = Math.min(settings.harmonics || 10, 64);
   const gs = glyphs.map(g => {
-    const coeffs = (g.coeffs||[]).slice(0, HARM_VIS);
+    const coeffs = (g.coeffs||[]).slice(0, harmos);
     return { coeffs, trace: EPI.tracePoints(coeffs, 300) };
   });
   animState = { glyphs: gs, start: performance.now(), onDone: onDone || null };
@@ -48,11 +60,41 @@ function stopAnim() {
   animState = null;
 }
 
+// hover overlay: which letter cell the pointer is over (chain reappears), or -1
+let hoverIdx = -1;
+function layoutFor(i, n, W, H) {
+  const margin = Math.min(W,H)*0.09;
+  const cellBox = Math.min(W, H)*0.20;
+  const fitsPerRow = Math.max(1, Math.floor((W-2*margin) / (cellBox*1.7)));
+  const rows = Math.ceil(n / Math.max(1, fitsPerRow));
+  const rowH = (H - 2*margin) / rows;
+  const box = Math.min(cellBox, rowH*CELL_FRAC);
+  const row = Math.min(rows-1, Math.floor(i/fitsPerRow));
+  const col = i % fitsPerRow;
+  const lettersInRow = Math.min(fitsPerRow, n - row*fitsPerRow);
+  const rowW = lettersInRow * (box*1.7);
+  const rowX0 = W/2 - rowW/2;
+  return { cx: rowX0 + col*box*1.7 + box/2, cy: margin + row*rowH + rowH/2, box };
+}
+canvas.addEventListener('mousemove', (e) => {
+  if (!animState) return;
+  const W=innerWidth,H=innerHeight;
+  const n = animState.glyphs.length;
+  hoverIdx = -1;
+  for (let i=0;i<n;i++){
+    const { cx, cy, box } = layoutFor(i, n, W, H);
+    if (Math.hypot(e.clientX-cx, e.clientY-cy) < box*0.5) { hoverIdx=i; break; }
+  }
+  // no re-schedule needed; loop already running; but ensure frame
+  if (!raf) loop();
+});
+canvas.addEventListener('mouseleave', () => { hoverIdx = -1; });
+
 // Each letter revolves once (drawMs) then holds as a dimmed trace.
 const DRAW_MS = 1200;      // one full epicycle revolution per letter
 const PER_LETTER = 1300;
 const CELL_FRAC = 0.85;
-const HARM_VIS = 10;       // harmonics used for the visual (matches tuner sweet spot)
+// display harmonics computed from settings (see showGlyphs: HARM_VIS pulled live via settings.harmonics)
 
 function loop() {
   const st = animState;
@@ -80,7 +122,7 @@ function loop() {
     const frac = Math.min(1, prog);
     const t = frac % 1;                       // revolution phase [0,1) — the rotating chain
 
-    const row = Math.min(rows-1, Math.floor(i / fitsPerRow));
+    const row = Math.min(rows-1, Math.floor(i/fitsPerRow));
     const col = i % fitsPerRow;
     const lettersInRow = Math.min(fitsPerRow, n - row*fitsPerRow);
     const rowW = lettersInRow * (box*1.7);
@@ -88,18 +130,30 @@ function loop() {
     const cx = rowX0 + col*box*1.7 + box/2;
     const cy = margin + row*rowH + rowH/2;
 
-    // TRUE Fourier frame: rotating chain + the trace its tip is laying down.
-    const color = frac < 1 ? '#00FFFF' : '#ffffff';
-    EPI.drawEpicycleFrame(ctx, g.coeffs, g.trace, t, cx, cy, box, color, frac);
+    // TRUE Fourier frame. Chain is visible ONLY while the letter is drawing OR on hover.
+    const isHovered = hoverIdx === i;
+    if (frac < 1) {
+      // actively drawing: cyan trace + live rotating chain
+      EPI.drawEpicycleFrame(ctx, g.coeffs, g.trace, t, cx, cy, box, '#00FFFF', frac);
+    } else if (isHovered) {
+      // hover overlay: dim trace + live chain (revolves with real time)
+      const ht = ((performance.now())/1600) % 1;
+      EPI.drawEpicycleFrame(ctx, g.coeffs, g.trace, ht, cx, cy, box, '#00FFFF', 1);
+    } else {
+      // finished, not hovered: just the quiet white trace (no chain)
+      EPI.drawTraceFrac(ctx, g.trace, cx, cy, box, 'rgba(255,255,255,0.55)', 1);
+    }
   }
 
   ctx.globalAlpha = 1;
-  const done = elapsed > (n-1)*PER_LETTER + DRAW_MS + 800;
-  if (!done) {
-    raf = requestAnimationFrame(loop);
-  } else {
-    const cb = st.onDone;
-    animState = null;
+  const done = elapsed > (n-1)*PER_LETTER + DRAW_MS;
+  if (!done || hoverIdx >= 0) {
+    raf = requestAnimationFrame(loop);   // keep looping while drawing OR while hover overlay active
+  } else if (animState && !animState._cbFired) {
+    animState._cbFired = true;
+    const cb = animState.onDone;
+    const lastState = animState;
+    // keep the traces on screen statically at this moment
     if (cb) cb();
   }
 }
@@ -114,7 +168,7 @@ btnWeave.addEventListener('click', () => {
   if (missing.length) { setStatus(`unsupported: ${missing.join('')}`); return; }
 
   // build the WAV now (pure), but do NOT download yet — visualize first
-  const { samples } = weaveBlocks(text, alphabet);
+  const { samples } = weaveBlocks(text, alphabet, { harmonics: settings.harmonics, noise: settings.noise, seed: settings.seed });
   const buf = encodeWav(samples, SGFConfig.sampleRate);
 
   // render the proven glyphs (each letter draws itself), THEN download on done
@@ -174,5 +228,39 @@ function decodeWavToFloat32(buf) {
   return out;
 }
 
+// ---- hidden config panel: triple-click the title to reveal, hover overlay handled above
+const panel = document.getElementById('settings');
+const titleTrig = document.getElementById('titleTrig');
+const eHarmo = document.getElementById('set-harmo'), oHarmo = document.getElementById('o-harmo');
+const eNoise = document.getElementById('set-noise'), oNoise = document.getElementById('o-noise');
+const eSeed  = document.getElementById('set-seed'),  oSeed  = document.getElementById('o-seed');
+const btnClose = document.getElementById('btn-close-settings');
+
+let titleClicks = 0, lastTap = 0;
+titleTrig.addEventListener('click', () => {
+  const now = Date.now();
+  if (now - lastTap > 500) titleClicks = 0;
+  titleClicks++; lastTap = now;
+  if (titleClicks >= 3) { panel.hidden = !panel.hidden; titleClicks = 0; if(!panel.hidden) applyControls(); }
+});
+btnClose.addEventListener('click', () => { panel.hidden = true; saveSettings(); });
+
+function applyControls() {
+  oHarmo.textContent = settings.harmonics; eHarmo.value = settings.harmonics;
+  oNoise.textContent = settings.noise.toFixed(2); eNoise.value = settings.noise;
+  oSeed.textContent = settings.seed; eSeed.value = settings.seed;
+}
+function wireRange(el, outEl, key, fmt) {
+  el.addEventListener('input', () => {
+    settings[key] = +el.value;
+    outEl.textContent = fmt(+el.value);
+  });
+  el.addEventListener('change', saveSettings);
+}
+wireRange(eHarmo, oHarmo, 'harmonics', v=>v);
+wireRange(eNoise, oNoise, 'noise', v=>v.toFixed(2));
+wireRange(eSeed, oSeed, 'seed', v=>v);
+applyControls();
+
 // expose for tests/debug
-window.SGF = { alphabet, weaveBlocks, encodeWav, analyzeBlocks, decodeWavToFloat32 };
+window.SGF = { alphabet, weaveBlocks, encodeWav, analyzeBlocks, decodeWavToFloat32, settings };

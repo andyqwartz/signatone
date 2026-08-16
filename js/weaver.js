@@ -14,22 +14,30 @@ const TARGET_PEAK = 0.8;
 
 function partLen() { return SGFConfig.blockSamples() / 2; }
 
-export function weaveBlocks(text, alphabet) {
+export function weaveBlocks(text, alphabet, opts = {}) {
   const pre = SGFConfig.preSamples();
   const plen = partLen();
   const markLen = SGFConfig.markSamples();
+  // options: harmonics (count of bins to emit), noise (0..1 -> per-letter random amplitude ratio)
+  const maxHarms = opts.harmonics || alphabet[text[0]||'A']?.length || 64;
+  const noiseMax = Math.max(0, opts.noise || 0);
+  const noiseSeed = opts.seed != null ? opts.seed : 12345;
   const total = pre + text.length*(plen*2 + markLen) + pre;
   const samples = new Float32Array(total);
   const markers = [];
   let idx = 0;
+  // deterministic-ish RNG state so per-letter noise reproduces a run if seed given
+  let rng = mulberry32(noiseSeed);
   const put = (fn, len) => { for (let i=0;i<len;i++){ samples[idx]=fn(idx); idx++; } };
 
   // preamble: pure f0 phase-0 (absolute phase reference)
   put((n)=>{ const t=n/SGFConfig.sampleRate; return Math.sin(2*Math.PI*SGFConfig.f0*t)*0.8; }, pre);
 
   for (const c of text) {
-    const harm = alphabet[c] || [];
+    const harm = (alphabet[c] || []).slice(0, maxHarms);   // amplitude-sorted already
     const startIdx = idx;
+    // each letter gets its OWN random noise amplitude in [0, noiseMax]  (always differs)
+    const letterNoise = noiseMax * rng();                    // 0..1 per letter
     // synthesize X (real part) and Y (imag) halves
     const xr = new Float32Array(plen);
     const yr = new Float32Array(plen);
@@ -41,7 +49,9 @@ export function weaveBlocks(text, alphabet) {
         x += h.amp*Math.cos(a);   // Re{ e^i(...) }
         y += h.amp*Math.sin(a);   // Im{ e^i(...) }
       }
-      xr[i]=x; yr[i]=y;
+      // deterministic per-letter noise, DIFFERENT value at every sample (thick water/dither)
+      const nv = (rng()*2-1) * letterNoise;
+      xr[i]=x+nv; yr[i]=y+nv;
     }
     // normalize both halves together to TARGET_PEAK (keeps relative shape)
     let peak = 1e-9;
@@ -56,3 +66,6 @@ export function weaveBlocks(text, alphabet) {
 
   return { samples: new Float32Array(samples), letters: [...text], markers };
 }
+
+// deterministic seeded RNG so "always different per letter" is reproducible per run/n.
+function mulberry32(a) { return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }

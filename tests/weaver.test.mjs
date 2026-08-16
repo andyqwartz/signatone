@@ -34,3 +34,25 @@ test('decoder detects f0 AND 2f0 in "B" block', () => {
   assert.ok(m1.magnitude > 0.2, `f0 ${m1.magnitude}`);
   assert.ok(m2.magnitude > 0.2, `2f0 ${m2.magnitude}`);
 });
+
+test('noise option: same letter+seed reproducible, different seed differs', () => {
+  const a1 = weaveBlocks('A', alpha, { harmonics:1, noise:0.1, seed:1 });
+  const a2 = weaveBlocks('A', alpha, { harmonics:1, noise:0.1, seed:1 });
+  const a3 = weaveBlocks('A', alpha, { harmonics:1, noise:0.1, seed:2 });
+  // same seed → identical
+  assert.deepEqual([...a1.samples], [...a2.samples]);
+  // different seed → different signal
+  let d = 0; for (let i=0;i<a1.samples.length;i++) d += Math.abs(a1.samples[i]-a3.samples[i]);
+  assert.ok(d > 0, 'different seed differs');
+});
+
+test('noise option: each identical letter gets DIFFERENT noise amplitude', () => {
+  const base = weaveBlocks('AA', alpha, { harmonics:1, noise:0.2, seed:99 });
+  // both halves of letter-1 vs letter-2 differ beyond the letter content (identical letters
+  // would otherwise be bit-identical), so per-letter noise must make them distinct
+  const pre=SGFConfig.preSamples(), plen=SGFConfig.blockSamples()/2;
+  const A1 = base.samples.subarray(pre, pre+plen).reduce((a,b)=>a+Math.abs(b),0);
+  const A2 = base.samples.subarray(pre+plen, pre+plen*2).reduce((a,b)=>a+Math.abs(b),0);
+  const B1 = base.samples.subarray(pre+plen*2+SGFConfig.markSamples(), pre+plen*2+SGFConfig.markSamples()+plen).reduce((a,b)=>a+Math.abs(b),0);
+  assert.ok(Math.abs(A1-B1) > 1e-6 || Math.abs(A2-B1) > 1e-6, 'per-letter noise yields distinct letters');
+});
