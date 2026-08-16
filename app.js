@@ -140,41 +140,9 @@ fileEl.addEventListener('change', async () => {
   const buf = await f.arrayBuffer();
   const samples = decodeWavToFloat32(buf);
   const { blocks } = analyzeBlocks(samples);
-  // match each decoded block to the closest glyph in the alphabet, then render
-  // the PROVEN signed coefficients for those letters (audio carries amp/phase
-  // per |k|, not the signed ±k structure — so we match glyph identity).
-  const glyphs = blocks.map(b => matchGlyph(b.coeffs));
-  setStatus(`${blocks.length} block${blocks.length===1?'':'s'} → ${glyphs.map(g=>g.letter).join('')}`);
-  showGlyphs(glyphs.map(g => ({ coeffs: g.coeffs, trace: null })));
+  setStatus(`${blocks.length} block${blocks.length===1?'':'s'} decoded`);
+  showGlyphs(blocks.map(b => ({ coeffs: b.coeffs, trace: null })));
 });
-
-// Match decoded block spectrum to nearest alphabet glyph by spectral correlation.
-function matchGlyph(decoded) {
-  // decoded: [{k, amp, phase, freq}], k=1..N positive.
-  // alphabet glyphs have signed bins; compare the positive-|k| magnitude envelope.
-  let best = null, bestC = -1;
-  for (const letter of alphabet.letterSet) {
-    // build expected positive-|k| magnitude envelope for this letter
-    const expected = new Map();
-    for (const h of alphabet[letter]) {
-      const key = Math.abs(h.k);
-      expected.set(key, (expected.get(key) || 0) + h.amp);
-    }
-    const got = new Map();
-    for (const d of decoded) { const key = Math.abs(d.k); got.set(key, d.amp); }
-    const keys = new Set([...expected.keys()]);
-    const a=[], b=[];
-    for (const k of keys) { a.push(got.get(k) || 0); b.push(expected.get(k) || 0); }
-    if (!a.length) continue;
-    let srr=0, see=0, sre=0;
-    const am = a.reduce((x,y)=>x+y,0)/a.length;
-    const bm = b.reduce((x,y)=>x+y,0)/b.length;
-    for (let i=0;i<a.length;i++){ srr+=(a[i]-am)**2; see+=(b[i]-bm)**2; sre+=(a[i]-am)*(b[i]-bm); }
-    const c = sre / (Math.sqrt(srr)*Math.sqrt(see) || 1);
-    if (c > bestC) { bestC = c; best = letter; }
-  }
-  return { letter: best, coeffs: alphabet[best] };
-}
 
 // Minimal WAV -> Float32Array (PCM16 mono, 48k). Handles our export format.
 function decodeWavToFloat32(buf) {
