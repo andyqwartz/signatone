@@ -31,10 +31,10 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-function showGlyphs(glyphs) {
+function showGlyphs(glyphs, onDone) {
   stopAnim();
-  const gs = glyphs.map(g => ({ coeffs: g.coeffs, trace: EPI.tracePoints(g.coeffs, 200) }));
-  animState = { glyphs: gs, start: performance.now() };
+  const gs = glyphs.map(g => ({ coeffs: (g.coeffs||[]).slice(0, HARM_VIS), trace: EPI.tracePoints((g.coeffs||[]).slice(0, HARM_VIS), 200) }));
+  animState = { glyphs: gs, start: performance.now(), onDone: onDone || null };
   animStart = animState.start;
   loop();
 }
@@ -49,6 +49,7 @@ function stopAnim() {
 const DRAW_MS = 700;
 const PER_LETTER = 850;
 const CELL_FRAC = 0.85;
+const HARM_VIS = 10;   // harmonics used for the visual (matches tuner sweet spot)
 
 function loop() {
   const st = animState;
@@ -92,7 +93,9 @@ function loop() {
   if (!done) {
     raf = requestAnimationFrame(loop);
   } else {
+    const cb = st.onDone;
     animState = null; // hold message on screen until next action clears canvas
+    if (cb) cb();
   }
 }
 
@@ -105,20 +108,28 @@ btnWeave.addEventListener('click', () => {
   const missing = [...text].filter(c => !alphabet[c]);
   if (missing.length) { setStatus(`unsupported: ${missing.join('')}`); return; }
 
+  // build the WAV now (pure), but do NOT download yet — visualize first
   const { samples } = weaveBlocks(text, alphabet);
   const buf = encodeWav(samples, SGFConfig.sampleRate);
-  const url = wavBlobUrl(buf);
 
+  // render the proven glyphs (each letter draws itself), THEN download on done
+  const glyphs = [...text].map(c => ({ coeffs: alphabet[c], trace: null }));
+  btnWeave.disabled = true;
+  setStatus('weaving · drawing…');
+  showGlyphs(glyphs, () => {
+    triggerDownload(buf);
+    btnWeave.disabled = false;
+    setStatus('weaved → downloaded · message drawn');
+  });
+});
+
+function triggerDownload(buf) {
+  const url = wavBlobUrl(buf);
   const a = document.createElement('a');
   a.href = url; a.download = 'sgf_signal.wav';
   document.body.appendChild(a); a.click(); a.remove();
-
-  // chained decode preview: render the KNOWN glyphs directly (we know the text).
-  // This gives the proven visual (signed bins) — not a lossy audio re-decode.
-  const glyphs = [...text].map(c => ({ coeffs: alphabet[c], trace: null }));
-  showGlyphs(glyphs);
-  setStatus('weaved → downloaded · decoding');
-});
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
 
 // ---- Stage 2: Upload & See ----
 btnSee.addEventListener('click', () => fileEl.click());
