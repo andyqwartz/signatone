@@ -24,7 +24,6 @@ const canvas = $('stage'), ctx = canvas.getContext('2d');
 const persistCanvas = document.createElement('canvas'), pctx = persistCanvas.getContext('2d');
 const statusEl = $('status');
 const btnWeave = $('btn-weave'), btnSee = $('btn-see');
-const btnTxt = $('btn-txt'), btnTxt2 = $('btn-txt2');
 const msgEl = $('msg'), fileEl = $('file');
 const sealEl = $('seal');
 const viewEncode = $('view-encode'), viewDecode = $('view-decode');
@@ -107,12 +106,13 @@ function showGlyphs(glyphs, onDone) {
   const harmos = Math.min(settings.harmonics || 10, 64);
   const gs = glyphs.map(g => {
     const coeffs = (g.coeffs || []).slice(0, harmos);
-    return { coeffs, trace: normalizeTrace(EPI.tracePoints(coeffs, 300)) };
+    return { _fullCoefs: (g.coeffs || []).slice(), coeffs, trace: normalizeTrace(EPI.tracePoints(coeffs, 300)) };
   });
   const sp = Math.max(0.25, settings.speed || 1);
   animState = { glyphs: gs, start: performance.now(), onDone: onDone || null,
     drawMs: BASE_DRAW / sp, per: BASE_PER / sp, prevSettled: -1 };
   recomputeLayout(); persistDirty = true;
+  downloadDock.hidden = false; btnDownloadImg.hidden = false;
   loop();
 }
 function stopAnim() { if (raf) cancelAnimationFrame(raf); raf = null; animState = null; }
@@ -217,21 +217,12 @@ function downloadTxt(name, text) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
-function offerEncodeText(text) { tx = { kind: 'encode', text }; btnTxt.hidden = false; btnTxt2.hidden = false; }
-function offerDecodeBlocks(blocks) { tx = { kind: 'decode', blocks }; btnTxt.hidden = false; btnTxt2.hidden = false; }
+function offerEncodeText(text) { tx = { kind: 'encode', text }; downloadDock.hidden = false; btnDownloadTxt.hidden = false; if (animState) showDock(); }
+function offerDecodeBlocks(blocks) { tx = { kind: 'decode', blocks }; downloadDock.hidden = false; btnDownloadTxt.hidden = false; if (animState) showDock(); }
 function transcribe() {
   if (!tx) return '';
   if (tx.kind === 'encode') return tx.text;
   return tx.blocks.map(b => bestGlyph(b.coeffs)).join('');
-}
-btnTxt.addEventListener('click', () => downloadTxt('signatone_transcription.txt', transcribe()));
-btnTxt2.addEventListener('click', () => downloadTxt('signatone_transcription.txt', transcribe()));
-
-function triggerDownload(buf) {
-  const url = wavBlobUrl(buf);
-  const a = document.createElement('a'); a.href = url; a.download = 'signatone_signal.wav';
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
 
 /* ---------------- STAGE 1: ENCODE ---------------- */
@@ -258,14 +249,15 @@ btnWeave.addEventListener('click', async () => {
     const g = settings.audioGain != null ? settings.audioGain : 1;
     if (g !== 1) for (let i = 0; i < samples.length; i++) samples[i] *= g;
     const buf = encodeWav(samples, SGFConfig.sampleRate);
-    triggerDownload(buf);
+    lastWavBuf = buf;
     offerEncodeText(original);
     btnWeave.disabled = false;
-    setStatus('weaved → downloaded · message drawn');
+    setStatus('weaved · ready to download');
     audioEncode.src = wavBlobUrl(buf); audioEncode.playbackRate = settings.audioTempo || 1;
     playerEncode.hidden = mode !== 'encode' ? true : false;
     updateCommandVar();
-    showGlyphs(chars.map(c => ({ coeffs: alphabet[c], trace: null })), () => setStatus('weaved → downloaded · message drawn'));
+    showDock();
+    showGlyphs(chars.map(c => ({ coeffs: alphabet[c], trace: null })), () => setStatus('weaved · ready to download'));
   } catch {
     btnWeave.disabled = false;
     setStatus('weave failed');
@@ -356,7 +348,7 @@ autoResize();
 
 /* ---------------- signal config panel ---------------- */
 const panel = $('settings'), titleTrig = $('titleTrig'),
-      btnClose = $('btn-close-settings'), btnSettings = $('btn-settings');
+      btnSettings = $('btn-settings');
 const els = {
   harmo: { range: $('set-harmo'), out: $('o-harmo') }, noise: { range: $('set-noise'), out: $('o-noise') },
   seed: { range: $('set-seed'), out: $('o-seed') }, speed: { range: $('set-speed'), out: $('o-speed') },
@@ -374,7 +366,22 @@ function applyControls() {
   els.glow.range.checked = !!settings.glow;
 }
 function applyLive() { if (animState) { recomputeLayout(); persistDirty = true; } }
-els.harmo.range.oninput = () => { settings.harmonics = +els.harmo.range.value; els.harmo.out.textContent = settings.harmonics; };
+// re-apply harmonics to the current rendering so the slider is reflected live
+function applyHarmonics() {
+  if (!animState) return;
+  const harmos = Math.min(settings.harmonics || 10, 64);
+  for (const g of animState.glyphs) {
+    const full = g._fullCoefs || g.coeffs;
+    g._fullCoefs = full;
+    g.coeffs = full.slice(0, harmos);
+    g.trace = normalizeTrace(EPI.tracePoints(g.coeffs, 300));
+  }
+  persistDirty = true;
+}
+els.harmo.range.oninput = () => {
+  settings.harmonics = +els.harmo.range.value; els.harmo.out.textContent = settings.harmonics;
+  applyHarmonics();
+};
 els.noise.range.oninput = () => { settings.noise = +els.noise.range.value; els.noise.out.textContent = settings.noise.toFixed(2); };
 els.seed.range.oninput = () => { settings.seed = +els.seed.range.value; els.seed.out.textContent = settings.seed; };
 els.speed.range.oninput = () => { settings.speed = +els.speed.range.value; els.speed.out.textContent = settings.speed.toFixed(2); };
@@ -391,11 +398,10 @@ titleTrig.addEventListener('click', () => {
   titleClicks++; lastTap = now;
   if (titleClicks >= 3) { panel.hidden = !panel.hidden; titleClicks = 0; if (!panel.hidden) applyControls(); }
 });
-btnClose.addEventListener('click', () => { panel.hidden = true; saveSettings(); });
-btnSettings.addEventListener('click', () => { panel.hidden = !panel.hidden; if (!panel.hidden) applyControls(); saveSettings(); });
+btnSettings.addEventListener('click', (e) => { e.stopPropagation(); panel.hidden = !panel.hidden; if (!panel.hidden) applyControls(); saveSettings(); });
 
 /* ---------------- audio config panel (contextual) ---------------- */
-const audioPanel = $('audio-options'), btnAudio = $('btn-audio'), btnCloseAudio = $('btn-close-audio');
+const audioPanel = $('audio-options'), btnAudio = $('btn-audio');
 const aEls = {
   gain: { range: $('set-a-gain'), out: $('o-a-gain') }, tempo: { range: $('set-a-tempo'), out: $('o-a-tempo') },
   vol: { range: $('set-a-vol'), out: $('o-a-vol') }, tempo2: { range: $('set-a-tempo2'), out: $('o-a-tempo2') },
@@ -411,11 +417,10 @@ aEls.tempo.range.oninput = () => { settings.audioTempo = +aEls.tempo.range.value
 aEls.vol.range.oninput = () => { settings.audioVol = +aEls.vol.range.value; aEls.vol.out.textContent = settings.audioVol.toFixed(2); audioDecode.volume = settings.audioVol; };
 aEls.tempo2.range.oninput = () => { settings.audioTempo2 = +aEls.tempo2.range.value; aEls.tempo2.out.textContent = settings.audioTempo2.toFixed(2); audioDecode.playbackRate = settings.audioTempo2; };
 for (const k of ['gain','tempo','vol','tempo2']) aEls[k].range.onchange = saveSettings;
-btnAudio.addEventListener('click', () => { audioPanel.hidden = !audioPanel.hidden; if (!audioPanel.hidden) applyAudioControls(); });
-btnCloseAudio.addEventListener('click', () => { audioPanel.hidden = true; saveSettings(); });
+btnAudio.addEventListener('click', (e) => { e.stopPropagation(); audioPanel.hidden = !audioPanel.hidden; if (!audioPanel.hidden) applyAudioControls(); });
 
 /* ---------------- image config (silhouette) ---------------- */
-const imgPanel = $('img-options'), btnImgOpt = $('btn-img-opt'), btnCloseImg = $('btn-close-img');
+const imgPanel = $('img-options'), btnImgOpt = $('btn-img-opt');
 const btnImg = $('btn-img'), imgfile = $('imgfile');
 const iEls = {
   threshold: { range: $('set-img-threshold'), out: $('o-img-threshold') },
@@ -438,8 +443,7 @@ iEls.mode.range.onchange = () => { settings.imgMode = iEls.mode.range.value; iEl
 iEls.main.range.onchange = () => { settings.imgMain = iEls.main.range.checked; saveSettings(); };
 iEls.threshold.range.onchange = saveSettings;
 iEls.harms.range.onchange = saveSettings;
-btnImgOpt.addEventListener('click', () => { imgPanel.hidden = !imgPanel.hidden; if (!imgPanel.hidden) applyImgControls(); });
-btnCloseImg.addEventListener('click', () => { imgPanel.hidden = true; saveSettings(); });
+btnImgOpt.addEventListener('click', (e) => { e.stopPropagation(); imgPanel.hidden = !imgPanel.hidden; if (!imgPanel.hidden) applyImgControls(); });
 
 // image -> silhouette -> epicycles (render) + single-block WAV (decodable)
 // (the α Image control is a <label> wrapping #imgfile — native tap opens the picker,
@@ -470,9 +474,9 @@ imgfile.addEventListener('change', async () => {
     try {
       const { samples } = await runWorker({ type: 'weave', text: key,
         opts: { harmonics: Math.min(coeffs.length, 512), noise: 0, seed: 0 } });
-      const wav = encodeWav(samples, SGFConfig.sampleRate);
-      triggerDownload(wav);
-      setStatus('image → silhouette · wav downloaded');
+      lastWavBuf = encodeWav(samples, SGFConfig.sampleRate);
+      showDock();
+      setStatus('image → silhouette · wav ready');
     } finally { delete alphabet[key]; }
   } catch (e) {
     setStatus('silhouette failed');
@@ -483,11 +487,22 @@ imgfile.addEventListener('change', async () => {
 applyControls(); applyAudioControls(); applyImgControls();
 
 /* ---------------- export (PNG still / GIF animate) ---------------- */
-const btnExport = $('btn-export'), btnExport2 = $('btn-export2'), exportPanel = $('export-panel');
+const btnDownloadAudio = $('btn-dl-audio'), btnDownloadImg = $('btn-dl-img'), btnDownloadTxt = $('btn-dl-txt');
+const downloadDock = $('downloads'), exportPanel = $('export-panel');
 const expPng = $('exp-png'), expGif = $('exp-gif');
-function toggleExport() { exportPanel.hidden = !exportPanel.hidden; }
-btnExport.addEventListener('click', toggleExport);
-btnExport2.addEventListener('click', toggleExport);
+let lastWavBuf = null;
+
+// dedicated downloads dock: audio / image / txt
+function showDock() {
+  downloadDock.hidden = false;
+  btnDownloadAudio.hidden = !lastWavBuf;
+  btnDownloadImg.hidden = !animState;
+}
+btnDownloadAudio.addEventListener('click', () => {
+  if (lastWavBuf) downloadBlob('signatone_signal.wav', new Blob([lastWavBuf], { type: 'audio/wav' }));
+});
+btnDownloadImg.addEventListener('click', (e) => { e.stopPropagation(); exportPanel.hidden = !exportPanel.hidden; });
+btnDownloadTxt.addEventListener('click', () => downloadTxt('signatone_transcription.txt', transcribe()));
 expPng.addEventListener('click', exportPNG);
 expGif.addEventListener('click', exportGIF);
 function downloadBlob(name, blob) {
@@ -528,6 +543,16 @@ function exportGIF() {
   gif.render();
 }
 setMode('encode');
+
+// close any open panel when clicking the backdrop / outside (toggles stopPropagation;
+// clicks INSIDE a panel/dock are preserved so sliders select keeps working)
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.hidden-panel, .export-panel, .downloads')) return;
+  if (!panel.hidden) { panel.hidden = true; saveSettings(); }
+  if (!audioPanel.hidden) { audioPanel.hidden = true; saveSettings(); }
+  if (!imgPanel.hidden) { imgPanel.hidden = true; saveSettings(); }
+  if (!exportPanel.hidden) exportPanel.hidden = true;
+});
 
 // expose for tests/debug
 window.SGF = { alphabet, encodeWav, analyzeBlocks: null, settings, isSealed };

@@ -50,7 +50,6 @@
     <div class="grp"><label>single-line max <output id="o-single">14</output></label><input type="range" id="set-single" min="1" max="30" step="1" value="14"></div>
     <div class="grp"><label>accent <output id="o-accent">#7e61d4</output></label><input type="color" id="set-accent" value="#7e61d4"></div>
     <div class="grp grp-chk"><label class="chk"><input type="checkbox" id="set-glow" checked> trace glow</label></div>
-    <button id="btn-close-settings">close</button>
   </aside>
 
   <!-- contextual audio configuration -->
@@ -60,7 +59,6 @@
     <div class="grp" data-aud="enc"><label>tempo <output id="o-a-tempo">1.00</output></label><input type="range" id="set-a-tempo" min="0.5" max="2" step="0.05" value="1"></div>
     <div class="grp" data-aud="dec"><label>volume <output id="o-a-vol">1.00</output></label><input type="range" id="set-a-vol" min="0" max="1" step="0.05" value="1"></div>
     <div class="grp" data-aud="dec"><label>tempo <output id="o-a-tempo2">1.00</output></label><input type="range" id="set-a-tempo2" min="0.5" max="2" step="0.05" value="1"></div>
-    <button id="btn-close-audio">close</button>
   </aside>
 
   <!-- image configuration -->
@@ -73,7 +71,13 @@
     <div class="grp"><label>source <output id="o-img-mode">auto</output></label>
       <select id="set-img-mode"><option value="auto" selected>auto</option><option value="alpha">alpha</option><option value="luma">luma</option></select></div>
     <div class="grp grp-chk"><label class="chk"><input type="checkbox" id="set-img-main"> main curve only</label></div>
-    <button id="btn-close-img">close</button>
+  </aside>
+
+  <!-- downloads: dedicated dock, separate from input + primary actions -->
+  <aside class="downloads" id="downloads" hidden>
+    <button id="btn-dl-audio" class="action ghost" hidden>⇩ audio</button>
+    <button id="btn-dl-img" class="action ghost" hidden>⇩ img</button>
+    <button id="btn-dl-txt" class="action ghost" hidden>↓ txt</button>
   </aside>
 
   <!-- ENCODE view -->
@@ -87,8 +91,6 @@
       <label id="btn-img" class="action file-label">α Image
         <input type="file" id="imgfile" accept="image/*">
       </label>
-      <button id="btn-export" class="action ghost">⇩ img</button>
-      <button id="btn-txt" class="action ghost" hidden>↓ txt</button>
     </section>
   </main>
 
@@ -98,10 +100,6 @@
       <label>signal</label>
       <input type="file" id="file" accept=".wav,audio/wav">
       <button id="btn-see" class="action inline">Upload &amp; See</button>
-    </section>
-    <section class="actions">
-      <button id="btn-export2" class="action ghost">⇩ img</button>
-      <button id="btn-txt2" class="action ghost" hidden>↓ txt</button>
     </section>
   </main>
 
@@ -132,6 +130,6 @@
   <div class="seal" id="seal" hidden>◈ signal captured</div>
 
   <script src="js/vendor/gif.js"></script>
-  <script type="module" src="app.js?v=20260817j"></script>
+  <script type="module" src="app.js?v=20260817k"></script>
 </body>
 </html>
