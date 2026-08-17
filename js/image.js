@@ -12,6 +12,22 @@
 //
 // Everything here is pure and unit-tested in tests/image.test.mjs.
 
+import { SGFConfig } from './config.js';
+
+// Max decodable bin index for the current SGFConfig.
+// The seer projects only k ∈ [-K, K]; bins beyond are lost on decode.
+export function maxKDecode() {
+  return Math.floor((SGFConfig.sampleRate / 2 - 2000) / SGFConfig.f0);
+}
+
+// Filter coeffs to only those within the decoder's range |k| ≤ K.
+// Preserves amplitude-sorted desc order (just removes out-of-band bins).
+export function filterDecodable(coeffs) {
+  const K = maxKDecode();
+  return coeffs.filter(c => Math.abs(c.k) <= K);
+}
+
+
 // 1) Binary mask from raw RGBA (ImageData). mode: 'auto' (use alpha only when
 //    it varies), 'alpha' (force alpha), 'luma' (force luminance threshold).
 export function maskFromImageData(data, w, h, threshold = 128, mode = 'auto') {

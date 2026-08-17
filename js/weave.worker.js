@@ -5,7 +5,7 @@
 import { weaveBlocks } from './weaver.js';
 import { analyzeBlocks, detectKind } from './seer.js';
 import { decodeWavToFloat32 } from './wav.js';
-import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour } from './image.js';
+import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js';
 
 let alphabet = null;
 function nextPow2(n) { let p = 1; while (p < n) p <<= 1; return p; }
@@ -46,6 +46,10 @@ self.onmessage = async (e) => {
         path = resample(path, nextPow2(Math.min(sample || 1024, 2048)));
       }
       coeffs = pathToCoeffs(path, maxHarms || 1024);
+      // clamp to the decoder's readable bin range (|k| ≤ maxK) so every emitted
+      // bin is actually recoverable — otherwise high spatial frequencies are
+      // woven but lost on decode → degraded image render.
+      coeffs = filterDecodable(coeffs);
       self.postMessage({ type: 'silhouette', coeffs });
     } else {
       throw new Error('unknown worker op: ' + type);

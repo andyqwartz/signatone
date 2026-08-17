@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, strongEdges, sobelMagnitude, gaussianBlur, edgeToPath } from '../js/image.js';
+import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, strongEdges, sobelMagnitude, gaussianBlur, edgeToPath, filterDecodable, maxKDecode } from '../js/image.js';
+import { SGFConfig } from '../js/config.js';
 
 // a square block: rows 2..13, cols 2..13 on a 16x16 grid
 function squareMask() {
@@ -120,4 +121,29 @@ test('photoContour finds a large ordered edge contour on a photo-like image', ()
   // centred: centroid ~0
   let sx = 0, sy = 0; for (const p of path) { sx += p.x; sy += p.y; }
   assert.ok(Math.abs(sx / n) < 4 && Math.abs(sy / n) < 4, 'centred');
+});
+
+test('maxKDecode matches the seer decode range formula', () => {
+  const K = maxKDecode();
+  assert.ok(K > 0, 'positive maxK');
+  const sr = SGFConfig.sampleRate, f0 = SGFConfig.f0;
+  const expected = Math.floor((sr / 2 - 2000) / f0);
+  assert.equal(K, expected);
+  assert.equal(K, 215, 'at sr=48000 f0=102, maxK is 215');
+});
+
+test('filterDecodable removes bins outside decoder range', () => {
+  const K = maxKDecode();
+  const coeffs = [
+    { k: 0, amp: 1.0, phase: 0 },
+    { k: K + 10, amp: 0.8, phase: 0 },   // out of band — removed
+    { k: -K, amp: 0.5, phase: 0 },
+    { k: K, amp: 0.5, phase: 0 },
+    { k: -K - 5, amp: 0.3, phase: 0 },   // out of band — removed
+  ];
+  const filtered = filterDecodable(coeffs);
+  assert.equal(filtered.length, 3, 'only 3 decodable bins remain');
+  for (const c of filtered) assert.ok(Math.abs(c.k) <= K, `|k|=${c.k} ≤ K`);
+  // amplitude-sorted desc preserved
+  for (let i = 1; i < filtered.length; i++) assert.ok(filtered[i].amp <= filtered[i - 1].amp + 1e-12);
 });
