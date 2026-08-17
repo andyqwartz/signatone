@@ -65,6 +65,7 @@ function drawChainT(ctx, coeffs, t, tr, color, alpha) {
   ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 0.5;
   ctx.globalAlpha = alpha;
   // chain origin is the trace box centre (ox,oy == centre + 0 offset since centre at box centre)
+  // canvas y is DOWN, so +vy here so the chain tip lands exactly on the trace (trace uses oy + y*s)
   let px = ox, py = oy;
   for (const h of coeffs) {
     const a = 2*Math.PI*h.k*t + h.phase;
@@ -74,9 +75,9 @@ function drawChainT(ctx, coeffs, t, tr, color, alpha) {
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(px, py);
-    ctx.lineTo(px+vx, py-vy);
+    ctx.lineTo(px+vx, py+vy);
     ctx.stroke();
-    px += vx; py -= vy;
+    px += vx; py += vy;
   }
   ctx.beginPath(); ctx.arc(px, py, 2, 0, 2*Math.PI); ctx.fill();
   ctx.globalAlpha = 1;

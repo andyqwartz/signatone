@@ -93,12 +93,21 @@ btnModeEnc.addEventListener('click', () => setMode('encode'));
 btnModeDec.addEventListener('click', () => setMode('decode'));
 
 /* ---------------- rendering ---------------- */
+// normalize a trace to be centred on (0,0) with span ~1, so the finite-letter
+// renderer (strokeGlyph) and the live chain (transformOf) share ONE transform:
+// both then place the trace at (cx,cy) at scale box*0.85 -> perfect hover/live alignment.
+function normalizeTrace(trace) {
+  let mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
+  for (const [x,y] of trace){ if(x<mnx)mnx=x; if(x>mxx)mxx=x; if(y<mny)mny=y; if(y>mxy)mxy=y; }
+  const cx=(mnx+mxx)/2, cy=(mny+mxy)/2, span=Math.max(mxx-mnx, mxy-mny)||1;
+  return trace.map(([x,y])=>[(x-cx)/span,(y-cy)/span]);
+}
 function showGlyphs(glyphs, onDone) {
   stopAnim();
   const harmos = Math.min(settings.harmonics || 10, 64);
   const gs = glyphs.map(g => {
     const coeffs = (g.coeffs || []).slice(0, harmos);
-    return { coeffs, trace: EPI.tracePoints(coeffs, 300) };
+    return { coeffs, trace: normalizeTrace(EPI.tracePoints(coeffs, 300)) };
   });
   const sp = Math.max(0.25, settings.speed || 1);
   animState = { glyphs: gs, start: performance.now(), onDone: onDone || null,
