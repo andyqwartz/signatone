@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeLayout, isPGP } from '../js/layout.js';
+import { computeLayout, isSealed } from '../js/layout.js';
 
 const W = 1400, H = 800;
 
@@ -50,14 +50,14 @@ test('long text: each row is centered and within bounds', () => {
   }
 });
 
-test('PGP detection: armored PGP block is recognised', () => {
-  assert.equal(isPGP('-----BEGIN PGP MESSAGE-----'), true);
-  assert.equal(isPGP('hello\n-----BEGIN PGP SIGNED MESSAGE-----\nbody'), true);
-  assert.equal(isPGP('-----BEGIN PGP MESSAGE, PART 1/3-----'), true);
+test('detection: header-marked block is recognised', () => {
+  assert.equal(isSealed('-----BEGIN PGP MESSAGE-----'), true);
+  assert.equal(isSealed('hello\n-----BEGIN PGP SIGNED MESSAGE-----\nbody'), true);
+  assert.equal(isSealed('-----BEGIN PGP MESSAGE, PART 1/3-----'), true);
 });
 
-test('PGP detection: plain text is not flagged', () => {
-  assert.equal(isPGP('HELLO WORLD'), false);
-  assert.equal(isPGP(''), false);
-  assert.equal(isPGP(null), false);
+test('detection: plain text is not flagged', () => {
+  assert.equal(isSealed('HELLO WORLD'), false);
+  assert.equal(isSealed(''), false);
+  assert.equal(isSealed(null), false);
 });

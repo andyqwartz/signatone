@@ -57,9 +57,10 @@ export function computeLayout(n, W, H, opts = {}) {
   return pts;
 }
 
-// Hidden PGP format detection. A pasted ASCII-armored PGP block opens with a
-// "-----BEGIN PGP ...-----" marker.
-export function isPGP(text) {
+// Header-marked message detection. Any pasted block that opens with a
+// "-----BEGIN ...-----" boundary is treated as opaque long text, not a message
+// to draw. (Kept deliberately unnamed; see the quiet path in app.js.)
+export function isSealed(text) {
   if (typeof text !== 'string' || text.length === 0) return false;
-  return /-{5}\s*BEGIN\s+PGP\b/i.test(text);
+  return /-{5}\s*BEGIN\b/i.test(text);
 }
