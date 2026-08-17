@@ -16,4 +16,5 @@ venv/
 # note: js/alphabet.json is intentionally VERSIONED (runtime data needed on clone)
 
 # Tuner dev tool (local tuning sandbox — not shipped)
-tuner/
+tuner/tmp_*_harness*.mjs
+tmp/*.mjs
