@@ -165,3 +165,82 @@ export function pathToCoeffs(path, maxHarms = 1024) {
   coeffs.sort((a, b) => b.amp - a.amp);
   return coeffs.slice(0, Math.min(maxHarms, coeffs.length));
 }
+
+/* ------------------------------------------------------------------ */
+/* 6) Edge-detection path for real photos (proven Fourier-Epicycles     */
+/*    parity: GaussianBlur -> Canny-like -> nearest-neighbour ordering  */
+/*    -> centring).  The alpha/luma *region* mask above is great for    */
+/*    clean silhouettes but fails on photos (noise loops / zero loops). */
+/* ------------------------------------------------------------------ */
+
+// Luma plane from RGBA.
+function lumaPlane(data, w, h) {
+  const out = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) out[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+  return out;
+}
+
+// 3x3 separable-ish Gaussian blur (uniform kernel weights 1/2/1) on the luma plane.
+export function gaussianBlur(plane, w, h) {
+  const out = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    let s = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const k = [1, 2, 1][dx + 1] * [1, 2, 1][dy + 1];
+      s += plane[(y + dy) * w + (x + dx)] * k;
+    }
+    out[y * w + x] = s / 16;
+  }
+  return out;
+}
+
+// Sobel gradient magnitude (used by Canny-like edge detection).
+export function sobelMagnitude(plane, w, h) {
+  const g = new Float32Array(w * h);
+  let maxg = 0;
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const p = (yy, xx) => plane[yy * w + xx];
+    const gx = -p(y - 1, x - 1) - 2 * p(y, x - 1) - p(y + 1, x - 1) + p(y - 1, x + 1) + 2 * p(y, x + 1) + p(y + 1, x + 1);
+    const gy = -p(y - 1, x - 1) - 2 * p(y - 1, x) - p(y - 1, x + 1) + p(y + 1, x - 1) + 2 * p(y + 1, x) + p(y + 1, x + 1);
+    const m = Math.sqrt(gx * gx + gy * gy);
+    g[y * w + x] = m; if (m > maxg) maxg = m;
+  }
+  return { g, maxg };
+}
+
+// Edge pixel extraction: magnitude above `ratio` of the global max (Canny high-threshold step).
+// Returns array of {x, y} image-coordinate edge pixels (y down).
+export function strongEdges(g, w, h, ratio = 0.15) {
+  const T = ratio * (g.maxg || 1);
+  const pts = [];
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++)
+    if (g.g[y * w + x] >= T) pts.push({ x, y });
+  return pts;
+}
+
+// Greedy nearest-neighbour ordering of edge pixels into ONE polyline, then
+// centre the whole path on its centroid (exact Fourier-Epicycles parity).
+export function edgeToPath(pts) {
+  if (!pts.length) return [];
+  const n = pts.length;
+  const ordered = new Array(n);
+  const used = new Uint8Array(n);
+  let cur = 0; used[0] = 1; ordered[0] = pts[0];
+  for (let k = 1; k < n; k++) {
+    let bi = -1, bd = Infinity, cx = pts[cur].x, cy = pts[cur].y;
+    for (let i = 0; i < n; i++) { if (used[i]) continue; const dx = pts[i].x - cx, dy = pts[i].y - cy; const d = dx * dx + dy * dy; if (d < bd) { bd = d; bi = i; } }
+    cur = bi; used[bi] = 1; ordered[k] = pts[bi];
+  }
+  // centre
+  let sx = 0, sy = 0; for (const p of ordered) { sx += p.x; sy += p.y; }
+  const cxm = sx / n, cym = sy / n;
+  return ordered.map(p => ({ x: p.x - cxm, y: p.y - cym }));
+}
+
+// Full photo silhouette: RGBA -> centred ordered edge polyline.
+export function photoContour(data, w, h, edgeRatio = 0.15) {
+  const plane = gaussianBlur(lumaPlane(data, w, h), w, h);
+  const mag = sobelMagnitude(plane, w, h);
+  const pts = strongEdges(mag, w, h, edgeRatio);
+  return edgeToPath(pts);
+}

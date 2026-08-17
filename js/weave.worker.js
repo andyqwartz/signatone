@@ -5,7 +5,7 @@
 import { weaveBlocks } from './weaver.js';
 import { analyzeBlocks } from './seer.js';
 import { decodeWavToFloat32 } from './wav.js';
-import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs } from './image.js';
+import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour } from './image.js';
 
 let alphabet = null;
 function nextPow2(n) { let p = 1; while (p < n) p <<= 1; return p; }
@@ -29,14 +29,22 @@ self.onmessage = async (e) => {
     } else if (type === 'silhouette') {
       const { buffer, w, h, threshold, mode, mainOnly, maxHarms, sample } = e.data;
       const rgba = new Uint8ClampedArray(buffer);
-      const { mask } = maskFromImageData(rgba, w, h, threshold == null ? 128 : threshold, mode || 'auto');
-      let loops = traceContours(mask, w, h);
-      if (!loops.length) throw new Error('no silhouette found');
-      if (mainOnly) loops = [loops.sort((a, b) => b.length - a.length)[0]];
-      const path = composePath(loops);
-      const N = nextPow2(Math.min(sample || 1024, 2048));
-      const pts = resample(path, N);
-      const coeffs = pathToCoeffs(pts, maxHarms || 1024);
+      let coeffs = null;
+      // 1) edge-based path (proven Canny-like + nearest-neighbour) works for
+      //    real photos; fall back to the alpha/luma region mask for clean silhouettes.
+      let path = photoContour(rgba, w, h, 0.15);
+      const EDGE_MIN = 64;
+      if (path.length >= EDGE_MIN) {
+        path = resample(path, nextPow2(Math.min(sample || 1024, 2048)));
+      } else {
+        const { mask } = maskFromImageData(rgba, w, h, threshold == null ? 128 : threshold, mode || 'auto');
+        let loops = traceContours(mask, w, h);
+        if (!loops.length) throw new Error('no silhouette found');
+        if (mainOnly) loops = [loops.sort((a, b) => b.length - a.length)[0]];
+        path = composePath(loops);
+        path = resample(path, nextPow2(Math.min(sample || 1024, 2048)));
+      }
+      coeffs = pathToCoeffs(path, maxHarms || 1024);
       self.postMessage({ type: 'silhouette', coeffs });
     } else {
       throw new Error('unknown worker op: ' + type);

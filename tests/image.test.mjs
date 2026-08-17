@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { traceContours, composePath, resample, pathToCoeffs } from '../js/image.js';
+import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, strongEdges, sobelMagnitude, gaussianBlur, edgeToPath } from '../js/image.js';
 
 // a square block: rows 2..13, cols 2..13 on a 16x16 grid
 function squareMask() {
@@ -80,7 +80,6 @@ test('DFT roundtrip: coeffs reconstruct the resampled path closely', () => {
   assert.ok(maxErr < 1e-6, `roundtrip error ${maxErr} < 1e-6`);
 });
 
-import { maskFromImageData } from '../js/image.js';
 test('maskFromImageData: alpha + luma', () => {
   const w = 3, h = 1; const data = new Uint8ClampedArray(w * h * 4);
   data[0]=0; data[1]=0; data[2]=0; data[3]=255;
@@ -90,4 +89,35 @@ test('maskFromImageData: alpha + luma', () => {
   assert.deepEqual([...a.mask], [1, 0, 1]);
   const l = maskFromImageData(data, w, h, 100, 'luma');
   assert.deepEqual([...l.mask], [1, 1, 0]);
+});
+
+// a realistic "photo": bright disc with interior shading + soft gradient bg
+// (NOT a clean binary silhouette) — edge-based path must yield one big contour.
+function photoRgba(w = 64, h = 64) {
+  const data = new Uint8ClampedArray(w * h * 4);
+  const cx = w / 2, cy = h / 2, r = w * 0.3;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const d = Math.hypot(x - cx, y - cy);
+    const bg = 180 + 40 * Math.sin(x / 8);
+    let v;
+    if (d < r) { const edge = Math.max(0, Math.min(1, r - d)); v = 80 + 100 * edge + 30 * Math.sin(d / 3); }
+    else v = bg;
+    const i = (y * w + x) * 4; data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+  }
+  return data;
+}
+test('photoContour finds a large ordered edge contour on a photo-like image', () => {
+  const w = 64, h = 64;
+  const data = photoRgba(w, h);
+  const path = photoContour(data, w, h, 0.15);
+  assert.ok(path.length >= 100, `edge path has >=100 pts (got ${path.length})`);
+  // ordered: consecutive jumps stay small (nearest-neighbour, closed loop)
+  const n = path.length;
+  let bi = 0;
+  for (let i = 1; i < n; i++) { const dx = path[i].x - path[i - 1].x, dy = path[i].y - path[i - 1].y; if (Math.hypot(dx, dy) > 10) bi++; }
+  // allow a couple of boundary splits but not chaos
+  assert.ok(bi < n * 0.1, `few big jumps (${bi})`);
+  // centred: centroid ~0
+  let sx = 0, sy = 0; for (const p of path) { sx += p.x; sy += p.y; }
+  assert.ok(Math.abs(sx / n) < 4 && Math.abs(sy / n) < 4, 'centred');
 });
