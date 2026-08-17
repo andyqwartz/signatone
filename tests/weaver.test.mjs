@@ -56,3 +56,32 @@ test('noise option: each identical letter gets DIFFERENT noise amplitude', () =>
   const B1 = base.samples.subarray(pre+plen*2+SGFConfig.markSamples(), pre+plen*2+SGFConfig.markSamples()+plen).reduce((a,b)=>a+Math.abs(b),0);
   assert.ok(Math.abs(A1-B1) > 1e-6 || Math.abs(A2-B1) > 1e-6, 'per-letter noise yields distinct letters');
 });
+
+test('noise jitters the sines: decoded coeffs differ (not rejected as orthogonal)', () => {
+  // With amp+phase jitter applied to each harmonic, the decoded coefficients
+  // must differ from the noise=0 bake. The OLD additive dither was rejected by
+  // the Goertzel correlation (orthogonal to the bins) — this guards against that.
+  const clean = weaveBlocks('B', alpha, { harmonics:2, noise:0, seed:7 });
+  const noisy = weaveBlocks('B', alpha, { harmonics:2, noise:0.6, seed:7 });
+  const pre = SGFConfig.preSamples();
+  const plen = SGFConfig.blockSamples();
+  // decode f0 and 2f0 with the seer-style correlation on block 0
+  const sr = SGFConfig.sampleRate;
+  const read = (samp, k) => {
+    const x = samp.subarray(pre, pre + plen/2);
+    const y = samp.subarray(pre + plen/2, pre + plen);
+    let cr=0, ci=0;
+    for (let i=0;i<x.length;i++){
+      const ph = 2*Math.PI*k*SGFConfig.f0*(i/sr);
+      cr += x[i]*Math.cos(ph) + y[i]*Math.sin(ph);
+      ci += y[i]*Math.cos(ph) - x[i]*Math.sin(ph);
+    }
+    return Math.sqrt(cr*cr+ci*ci)/x.length;
+  };
+  const sf = read(clean.samples, 1), nf = read(noisy.samples, 1);
+  const s2 = read(clean.samples, 2), n2 = read(noisy.samples, 2);
+  // jitter changes the harmonic amplitudes relative to clean
+  const drift = Math.abs(nf - sf) + Math.abs(n2 - s2);
+  assert.ok(drift > 1e-6, `noise shifts decoded harmonic amps (drift=${drift.toExponential(1)})`);
+  assert.ok(sf > 0.05 && s2 > 0.05, 'clean still has both harmonics');
+});

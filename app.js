@@ -43,6 +43,8 @@ let tx = null;                  // pending transcription descriptor
 let decodeUrl = null;
 
 const SETTINGS_KEY = 'sgf.settings.v3';
+const MODE_KEY = 'sgf.mode';
+const MSG_KEY = 'sgf.message';
 const settings = loadSettings();
 
 function loadSettings() {
@@ -76,6 +78,7 @@ function updateCommandVar() {
 /* ---------------- mode switch ---------------- */
 function setMode(m) {
   mode = m;
+  try { localStorage.setItem(MODE_KEY, m); } catch {}
   document.body.className = 'mode-' + m;
   btnModeEnc.classList.toggle('is-active', m === 'encode');
   btnModeDec.classList.toggle('is-active', m === 'decode');
@@ -360,7 +363,12 @@ function autoResize() {
   msgEl.style.width = cw + 'px'; msgEl.style.maxWidth = '92vw';
   updateCommandVar();
 }
-msgEl.addEventListener('input', autoResize);
+// persist the encode draft across reloads
+try { msgEl.value = localStorage.getItem(MSG_KEY) || ''; } catch {}
+msgEl.addEventListener('input', () => {
+  autoResize();
+  try { localStorage.setItem(MSG_KEY, msgEl.value); } catch {}
+});
 autoResize();
 
 /* ---------------- signal config panel ---------------- */
@@ -559,7 +567,10 @@ function exportGIF() {
   gif.on('finished', (blob) => { downloadBlob('signatone_epicycles.gif', blob); setStatus('gif exported'); });
   gif.render();
 }
-setMode('encode');
+// restore the last-used mode (encode/decode) across reloads
+let savedMode = 'encode';
+try { savedMode = localStorage.getItem(MODE_KEY) === 'decode' ? 'decode' : 'encode'; } catch {}
+setMode(savedMode);
 
 // close any open panel when clicking the backdrop / outside (toggles stopPropagation;
 // clicks INSIDE a panel/dock are preserved so sliders select keeps working)

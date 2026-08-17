@@ -223,8 +223,10 @@ export function strongEdges(g, w, h, ratio = 0.15) {
 // Greedy nearest-neighbour ordering of edge pixels, accelerated with a
 // spatial grid (cell = 8px) so lookup is O(N · cells) instead of O(N²).
 // Splits into separate cycles when the nearest candidate jumps > 10px
-// (exact Fourier-Epicycles `prepare_image` parity), then returns the
-// LONGEST cycle (main contour), centred on its centroid.
+// (exact Fourier-Epicycles `prepare_image` parity), then concatenates ALL
+// cycles back into one ordered polyline and centres it (same result as the
+// original greedy ordering, just much faster and with cycle-splitting to
+// avoid long image-crossing lines).
 export function edgeToPath(pts) {
   if (!pts.length) return [];
   const CELL = 8;
@@ -242,9 +244,7 @@ export function edgeToPath(pts) {
     const cycle = [pts[start]];
     used[start] = 1;
     let cx = pts[start].x, cy = pts[start].y;
-    let guard = 0;
     for (;;) {
-      if (++guard > pts.length) break;
       let bi = -1, bd = Infinity;
       const gx = Math.floor(cx / CELL), gy = Math.floor(cy / CELL);
       for (let dy = -3; dy <= 3 && bi < 0; dy++) {
@@ -266,13 +266,14 @@ export function edgeToPath(pts) {
     }
     if (cycle.length >= 3) cycles.push(cycle);
   }
-  // longest cycle = main contour (Fourier-Epicycles `main_curve_only`)
-  if (!cycles.length) return [];
-  cycles.sort((a, b) => b.length - a.length);
-  const longest = cycles[0];
-  let sx = 0, sy = 0; for (const p of longest) { sx += p.x; sy += p.y; }
-  const n = longest.length, cxm = sx / n, cym = sy / n;
-  return longest.map(p => ({ x: p.x - cxm, y: p.y - cym }));
+  // Concatenate ALL cycles into one ordered polyline (same as the original
+  // greedy ordering, just faster). Then centre the whole path.
+  const all = [];
+  for (const c of cycles) for (const p of c) all.push(p);
+  if (!all.length) return [];
+  let sx = 0, sy = 0; for (const p of all) { sx += p.x; sy += p.y; }
+  const n = all.length, cxm = sx / n, cym = sy / n;
+  return all.map(p => ({ x: p.x - cxm, y: p.y - cym }));
 }
 
 // Full photo silhouette: RGBA -> centred ordered edge polyline.

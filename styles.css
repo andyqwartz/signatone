@@ -103,6 +103,18 @@ html, body {
   color: var(--dim);
   text-transform: uppercase;
 }
+/* decode field hint — sits where the textarea does on the encode side so the
+   Decode button lands on the same layer/height as Encode text / Encode image */
+.field.see { justify-content: center; }
+.field .hint {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  line-height: 1.6;
+  max-width: 240px;
+  padding: 8px 2px;
+}
 textarea {
   display: block;
   width: 100%;
@@ -265,59 +277,6 @@ textarea::-webkit-scrollbar-thumb { background: var(--dim2); border-radius: 3px;
 .seal.show { opacity: 1; }
 .seal .ok { color: var(--ember); display: block; font-size: 15px; margin-bottom: 6px; }
 
-@media (max-width: 720px) {
-  .command { flex-direction: column; align-items: stretch; max-width: 92vw; }
-  .actions { flex-direction: row; border-left: none; border-top: var(--hair) solid var(--hair);
-    margin-left: 0; padding-left: 0; margin-top: 12px; padding-top: 12px; }
-  .action { flex: 1; text-align: center; }
-  .field { min-width: 0; }
-  textarea { width: 100%; }
-  .player { max-width: 92vw; }
-}
-
-/* ---- mobile layout (<720px): no top-bar overlap, panels full-width ---- */
-@media (max-width: 720px) {
-  /* top row: mode switch + settings buttons; logo/motto slide UNDER it */
-  .modes { top: 10px; }
-  .top-right { top: 6px; right: 14px; gap: 8px; }
-  .settings-toggle { width: 32px; height: 32px; }
-
-  .hud { top: 58px; left: 16px; }
-  .hud .brand { font-size: 15px; letter-spacing: 0.2em; }
-  .hud .sub { font-size: 8px; margin-top: 3px; letter-spacing: 0.16em; white-space: nowrap; }
-
-  /* panels: docked full-width under the top controls, never overlapped */
-  .hidden-panel {
-    top: 96px;
-    right: 12px;
-    left: 12px;
-    width: auto;
-    max-height: calc(100vh - 130px);
-  }
-
-  .status { left: 16px; bottom: 10px; }
-
-  /* command bar sits above the home indicator area */
-  .command { bottom: 12px; }
-
-  /* downloads dock: horizontal bar at the bottom edge, clear of players */
-  .downloads {
-    top: auto;
-    bottom: calc(var(--cmd-h, 90px) + 66px);
-    right: 50%;
-    transform: translateX(50%);
-    flex-direction: row;
-  }
-}
-
-/* ---- narrow phones (<430px): compact header row ---- */
-@media (max-width: 430px) {
-  .hud .sub { display: none; }
-  .top-right { gap: 6px; }
-  .modes { padding: 2px; }
-  .mode-btn { padding: 5px 11px; font-size: 8px; }
-}
-
 /* ===================== ENCODE / DECODE modes ===================== */
 .modes {
   position: fixed;
@@ -385,8 +344,6 @@ body.mode-encode [data-aud="dec"] { display: none; }
   z-index: 1;
 }
 .action.ghost:hover { opacity: 1; }
-.action.inline { margin-top: 10px; }
-#view-decode .field input[type="file"] { margin-bottom: 0; }
 
 /* ===================== audio player ===================== */
 .player {
@@ -455,4 +412,64 @@ body.mode-encode [data-aud="dec"] { display: none; }
   color: var(--dim);
   text-transform: uppercase;
   padding: 0 4px;
+}
+
+/* ===================== mobile — placed LAST so these win the cascade ===================== */
+@media (max-width: 720px) {
+  /* command console: compact column so the viz stays visible above it */
+  .command { flex-direction: column; align-items: stretch; max-width: 92vw;
+    padding: 12px 14px; max-height: 34vh; }
+  .actions { flex-direction: row; border-left: none; border-top: var(--hair) solid var(--hair);
+    margin-left: 0; padding-left: 0; margin-top: 10px; padding-top: 10px; }
+  .action { flex: 1; text-align: center; padding: 11px 10px; font-size: 11px; }
+  .field { min-width: 0; }
+  textarea { width: 100%; max-height: 16vh; min-height: 44px; }
+  .field .hint { max-width: 100%; padding: 4px 2px; }
+  .player { max-width: 92vw; }
+}
+
+/* ---- mobile layout (<720px): two-tier header, no overlap, viz never hidden ---- */
+@media (max-width: 720px) {
+  /* Tier 1 (top row): logo left + settings right */
+  .hud { top: 12px; left: 14px; }
+  .hud .brand { font-size: 15px; letter-spacing: 0.18em; }
+  .hud .sub { display: none; }               /* motto dropped: no clutter on small screens */
+  .top-right { top: 12px; right: 12px; gap: 8px; }
+  .settings-toggle { width: 34px; height: 34px; }
+
+  /* Tier 2 (below the top row): mode switch centred, LARGER buttons */
+  .modes { top: 60px; left: 50%; transform: translateX(-50%); padding: 4px; }
+  .mode-btn { font-size: 11px; padding: 9px 22px; }
+
+  /* panels: docked full-width under the tier-2 modes, never overlapped */
+  .hidden-panel {
+    top: 112px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-height: calc(100vh - 140px);
+  }
+
+  .status { left: 14px; bottom: 10px; }
+
+  /* command bar sits low, above the home indicator area */
+  .command { bottom: 12px; }
+
+  /* downloads dock: horizontal bar at the bottom edge, clear of players */
+  .downloads {
+    top: auto;
+    bottom: calc(var(--cmd-h, 80px) + 60px);
+    right: 50%;
+    transform: translateX(50%);
+    flex-direction: row;
+  }
+}
+
+/* ---- narrow phones (<430px): compact header row ---- */
+@media (max-width: 430px) {
+  .hud .brand { font-size: 13px; letter-spacing: 0.14em; }
+  .top-right { gap: 6px; }
+  .settings-toggle { width: 30px; height: 30px; }
+  .modes { top: 56px; padding: 3px; }
+  .mode-btn { padding: 8px 16px; font-size: 10px; }
 }

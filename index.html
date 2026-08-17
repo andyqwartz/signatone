@@ -43,7 +43,7 @@
   <aside class="hidden-panel" id="settings" hidden>
     <h2>configuration</h2>
     <div class="grp"><label>harmonics <output id="o-harmo">10</output></label><input type="range" id="set-harmo" min="1" max="60" step="1" value="10"></div>
-    <div class="grp"><label>noise ± <output id="o-noise">0.00</output></label><input type="range" id="set-noise" min="0" max="0.5" step="0.01" value="0"></div>
+    <div class="grp"><label>noise ± <output id="o-noise">0.00</output></label><input type="range" id="set-noise" min="0" max="1" step="0.02" value="0"></div>
     <div class="grp"><label>seed <output id="o-seed">12345</output></label><input type="range" id="set-seed" min="1" max="99999" step="1" value="12345"></div>
     <div class="grp"><label>speed <output id="o-speed">1.0</output></label><input type="range" id="set-speed" min="0.25" max="4" step="0.05" value="1"></div>
     <div class="grp"><label>spacing <output id="o-spacing">1.7</output></label><input type="range" id="set-spacing" min="1" max="2.5" step="0.05" value="1.7"></div>
@@ -99,7 +99,10 @@
   <main class="command" id="view-decode" hidden>
     <section class="field see">
       <label>signal</label>
-      <label class="action inline file-label" id="btn-see" title="Choose a signal WAV to decode">
+      <p class="hint">Choose a signal WAV to reveal its living Fourier epicycles.</p>
+    </section>
+    <section class="actions">
+      <label id="btn-see" class="action file-label" title="Choose a signal WAV to decode">
         <input type="file" id="file" accept=".wav,audio/wav">
         Decode signal
       </label>
@@ -133,6 +136,6 @@
   <div class="seal" id="seal" hidden>◈ signal captured</div>
 
   <script src="js/vendor/gif.js"></script>
-  <script type="module" src="app.js?v=20260817m"></script>
+  <script type="module" src="app.js?v=20260817n"></script>
 </body>
 </html>

@@ -38,22 +38,26 @@ export function weaveBlocks(text, alphabet, opts = {}) {
   for (const c of text) {
     const harm = (alphabet[c] || []).slice(0, maxHarms);   // amplitude-sorted already
     const startIdx = idx;
-    // each letter gets its OWN random noise amplitude in [0, noiseMax]  (always differs)
-    const letterNoise = noiseMax * rng();                    // 0..1 per letter
+    // noise applied TO THE SINES: each letter gets deterministic per-harmonic
+    // amplitude + phase jitter (seeded rng). This propagates into the decoded
+    // coefficients, so the epicycles visibly deform (organic blur), unlike the
+    // old additive dither which Goertzel rejected as orthogonal noise.
+    const ampJitter = harm.map(() => 1 + noiseMax * (rng() * 2 - 1));
+    const phJitter = harm.map(() => noiseMax * (rng() * 2 - 1) * 1.2);
     // synthesize X (real part) and Y (imag) halves
     const xr = new Float32Array(plen);
     const yr = new Float32Array(plen);
     for (let i=0;i<plen;i++){
       const t=i/SGFConfig.sampleRate;
       let x=0, y=0;
-      for (const h of harm){
-        const a = 2*Math.PI*h.k*SGFConfig.f0*t + h.phase;
-        x += h.amp*Math.cos(a);   // Re{ e^i(...) }
-        y += h.amp*Math.sin(a);   // Im{ e^i(...) }
+      for (let j=0;j<harm.length;j++){
+        const h = harm[j];
+        const a = 2*Math.PI*h.k*SGFConfig.f0*t + h.phase + phJitter[j];
+        const amp = h.amp * ampJitter[j];
+        x += amp*Math.cos(a);   // Re{ e^i(...) }
+        y += amp*Math.sin(a);   // Im{ e^i(...) }
       }
-      // deterministic per-letter noise, DIFFERENT value at every sample (thick water/dither)
-      const nv = (rng()*2-1) * letterNoise;
-      xr[i]=x+nv; yr[i]=y+nv;
+      xr[i]=x; yr[i]=y;
     }
     // normalize both halves together to TARGET_PEAK (keeps relative shape)
     let peak = 1e-9;
