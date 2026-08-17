@@ -13,6 +13,7 @@
 // Everything here is pure and unit-tested in tests/image.test.mjs.
 
 import { SGFConfig } from './config.js';
+import { fftSignedCoeffs } from './fft.js';
 
 // Max decodable bin index for the current SGFConfig.
 // The seer projects only k ∈ [-K, K]; bins beyond are lost on decode.
@@ -155,30 +156,15 @@ export function resample(path, n) {
   return out;
 }
 
-// 5) Complex DFT of a path (z=x+iy), SIGNED bins, amp=|c|/N, phase=atan2, sorted
+// 5) Complex FFT of a path (z=x+iy), SIGNED bins, amp=|c|/N, phase=atan2, sorted
 //    by amplitude desc. Matches Jezzamonn getFourierData / our alphabet format.
-//    (Naive O(N^2) — fine for N <= 2048 in a worker.)
+//    Radix-2 FFT (O(N log N)) — N must be a power of 2 (guaranteed by resample).
 export function pathToCoeffs(path, maxHarms = 1024) {
   const N = path.length;
   if (!N) return [];
   const re = new Float64Array(N), im = new Float64Array(N);
   for (let i = 0; i < N; i++) { re[i] = path[i].x; im[i] = path[i].y; }
-  // signed bins: k in [-N/2 .. N/2)
-  const coeffs = [];
-  const half = N >> 1;
-  for (let k = -half; k < half; k++) {
-    let sr = 0, si = 0;
-    for (let n = 0; n < N; n++) {
-      const ang = -2 * Math.PI * k * n / N;
-      const cr = Math.cos(ang), ci = Math.sin(ang);
-      sr += re[n] * cr - im[n] * ci;
-      si += re[n] * ci + im[n] * cr;
-    }
-    const amp = Math.sqrt(sr * sr + si * si) / N;
-    if (amp < 1e-9) continue;
-    coeffs.push({ k, amp, phase: Math.atan2(si, sr) });
-  }
-  coeffs.sort((a, b) => b.amp - a.amp);
+  const coeffs = fftSignedCoeffs(re, im);
   return coeffs.slice(0, Math.min(maxHarms, coeffs.length));
 }
 
