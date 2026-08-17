@@ -9,7 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="mode-encode">
+
   <canvas id="stage"></canvas>
 
   <header class="hud">
@@ -17,66 +18,89 @@
     <p class="sub">The sound is the form.</p>
   </header>
 
-  <button class="settings-toggle" id="btn-settings" title="hidden configuration" aria-label="settings">
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1">
-      <circle cx="8" cy="8" r="2.1"/>
-      <path d="M8 1.2v2 M8 12.8v2 M1.2 8h2 M12.8 8h2 M3 3l1.4 1.4 M11.6 11.6L13 13 M13 3l-1.4 1.4 M4.4 11.6L3 13" stroke-linecap="round"/>
-    </svg>
-  </button>
+  <!-- mode switch -->
+  <nav class="modes" id="modes">
+    <button class="mode-btn is-active" id="btn-mode-encode">Encode</button>
+    <button class="mode-btn" id="btn-mode-decode">Decode</button>
+  </nav>
 
+  <!-- top-right: signal config gear + audio config -->
+  <div class="top-right">
+    <button class="settings-toggle" id="btn-settings" title="configuration" aria-label="configuration">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1"><circle cx="8" cy="8" r="2.1"/><path d="M8 1.2v2 M8 12.8v2 M1.2 8h2 M12.8 8h2 M3 3l1.4 1.4 M11.6 11.6L13 13 M13 3l-1.4 1.4 M4.4 11.6L3 13" stroke-linecap="round"/></svg>
+    </button>
+    <button class="settings-toggle audio" id="btn-audio" title="audio" aria-label="audio">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1"><path d="M2 6v4 M5 4v8 M8 2v12 M11 4v8 M14 6v4" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+
+  <!-- signal configuration -->
   <aside class="hidden-panel" id="settings" hidden>
     <h2>configuration</h2>
-    <div class="grp">
-      <label>harmonics <output id="o-harmo">10</output></label>
-      <input type="range" id="set-harmo" min="1" max="60" step="1" value="10">
-    </div>
-    <div class="grp">
-      <label>noise ± <output id="o-noise">0.00</output></label>
-      <input type="range" id="set-noise" min="0" max="0.5" step="0.01" value="0">
-    </div>
-    <div class="grp">
-      <label>seed <output id="o-seed">12345</output></label>
-      <input type="range" id="set-seed" min="1" max="99999" step="1" value="12345">
-    </div>
-    <div class="grp">
-      <label>speed <output id="o-speed">1.0</output></label>
-      <input type="range" id="set-speed" min="0.25" max="4" step="0.05" value="1">
-    </div>
-    <div class="grp">
-      <label>spacing <output id="o-spacing">1.7</output></label>
-      <input type="range" id="set-spacing" min="1" max="2.5" step="0.05" value="1.7">
-    </div>
-    <div class="grp">
-      <label>single-line max <output id="o-single">14</output></label>
-      <input type="range" id="set-single" min="1" max="30" step="1" value="14">
-    </div>
-    <div class="grp">
-      <label>accent <output id="o-accent">#E8A33D</output></label>
-      <input type="color" id="set-accent" value="#E8A33D">
-    </div>
-    <div class="grp grp-chk">
-      <label class="chk"><input type="checkbox" id="set-glow" checked> trace glow</label>
-    </div>
+    <div class="grp"><label>harmonics <output id="o-harmo">10</output></label><input type="range" id="set-harmo" min="1" max="60" step="1" value="10"></div>
+    <div class="grp"><label>noise ± <output id="o-noise">0.00</output></label><input type="range" id="set-noise" min="0" max="0.5" step="0.01" value="0"></div>
+    <div class="grp"><label>seed <output id="o-seed">12345</output></label><input type="range" id="set-seed" min="1" max="99999" step="1" value="12345"></div>
+    <div class="grp"><label>speed <output id="o-speed">1.0</output></label><input type="range" id="set-speed" min="0.25" max="4" step="0.05" value="1"></div>
+    <div class="grp"><label>spacing <output id="o-spacing">1.7</output></label><input type="range" id="set-spacing" min="1" max="2.5" step="0.05" value="1.7"></div>
+    <div class="grp"><label>single-line max <output id="o-single">14</output></label><input type="range" id="set-single" min="1" max="30" step="1" value="14"></div>
+    <div class="grp"><label>accent <output id="o-accent">#E8A33D</output></label><input type="color" id="set-accent" value="#E8A33D"></div>
+    <div class="grp grp-chk"><label class="chk"><input type="checkbox" id="set-glow" checked> trace glow</label></div>
     <button id="btn-close-settings">close</button>
   </aside>
 
-  <main class="command" id="command">
+  <!-- contextual audio configuration -->
+  <aside class="hidden-panel" id="audio-options" hidden>
+    <h2 id="audio-title">audio · encode</h2>
+    <div class="grp" data-aud="enc"><label>gain <output id="o-a-gain">1.00</output></label><input type="range" id="set-a-gain" min="0.1" max="2" step="0.05" value="1"></div>
+    <div class="grp" data-aud="enc"><label>tempo <output id="o-a-tempo">1.00</output></label><input type="range" id="set-a-tempo" min="0.5" max="2" step="0.05" value="1"></div>
+    <div class="grp" data-aud="dec"><label>volume <output id="o-a-vol">1.00</output></label><input type="range" id="set-a-vol" min="0" max="1" step="0.05" value="1"></div>
+    <div class="grp" data-aud="dec"><label>tempo <output id="o-a-tempo2">1.00</output></label><input type="range" id="set-a-tempo2" min="0.5" max="2" step="0.05" value="1"></div>
+    <button id="btn-close-audio">close</button>
+  </aside>
+
+  <!-- ENCODE view -->
+  <main class="command" id="view-encode">
     <section class="field weave">
       <label for="msg">plaintext</label>
-      <textarea id="msg" spellcheck="false" autocomplete="off" placeholder="SIGNAL"></textarea>
+      <textarea id="msg" spellcheck="false" autocomplete="off" placeholder="The sound is the form."></textarea>
     </section>
     <section class="actions">
-      <button id="btn-weave" class="action">Weave &amp; Download</button>
-      <button id="btn-see" class="action">Upload &amp; See</button>
-      <input type="file" id="file" accept=".wav,audio/wav" hidden>
+      <button id="btn-weave" class="action">Weave</button>
+      <button id="btn-txt" class="action ghost" hidden>↓ txt</button>
     </section>
   </main>
 
+  <!-- DECODE view -->
+  <main class="command" id="view-decode" hidden>
+    <section class="field see">
+      <label>signal</label>
+      <input type="file" id="file" accept=".wav,audio/wav">
+      <button id="btn-see" class="action inline">Upload &amp; See</button>
+    </section>
+    <section class="actions">
+      <button id="btn-txt2" class="action ghost" hidden>↓ txt</button>
+    </section>
+  </main>
+
+  <!-- audio players -->
+  <div class="player" id="player-encode" hidden>
+    <button class="play" id="play-encode">▶</button>
+    <input type="range" class="scrub" id="scrub-encode" min="0" max="1000" value="0">
+    <span class="time" id="time-encode">0:00 / 0:00</span>
+    <audio id="audio-encode" hidden></audio>
+  </div>
+  <div class="player" id="player-decode" hidden>
+    <button class="play" id="play-decode">▶</button>
+    <input type="range" class="scrub" id="scrub-decode" min="0" max="1000" value="0">
+    <span class="time" id="time-decode">0:00 / 0:00</span>
+    <audio id="audio-decode" hidden></audio>
+  </div>
+
   <div class="status" id="status">—</div>
 
-  <!-- stealth toast (hidden by default) -->
-  <div class="stealth" id="stealth" hidden>◈ signal sealed — no trace left</div>
+  <!-- quiet confirmation -->
+  <div class="seal" id="seal" hidden>◈ signal captured</div>
 
-  <script type="module" src="app.js?v=20260817e"></script>
+  <script type="module" src="app.js?v=20260817f"></script>
 </body>
 </html>

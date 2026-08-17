@@ -43,12 +43,9 @@ Key in, it becomes signal. The signal becomes spectacle: epicycles that turn,
 hands of phasors, the letter assembling itself out of accumulated rotation —
 an encryption that draws its own decryption. A single word stays on one line,
 auto-scaled and centered; long messages wrap to fill the stage, rendered fast
-on a persisted layer.
-
-## Stealth
-
-A pasted PGP armor block is detected invisibly: it is woven to WAV and
-downloaded with a quiet confirmation — **no trace is drawn**.
+on a persisted layer. Full character set is woven — letters, digits,
+punctuation, accents — and a discreet transcription of your text is always
+offered as a plain `.txt`.
 
 ## blocs
 
