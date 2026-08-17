@@ -220,29 +220,70 @@ export function strongEdges(g, w, h, ratio = 0.15) {
   return pts;
 }
 
-// Greedy nearest-neighbour ordering of edge pixels into ONE polyline, then
-// centre the whole path on its centroid (exact Fourier-Epicycles parity).
+// Greedy nearest-neighbour ordering of edge pixels, accelerated with a
+// spatial grid (cell = 8px) so lookup is O(N · cells) instead of O(N²).
+// Splits into separate cycles when the nearest candidate jumps > 10px
+// (exact Fourier-Epicycles `prepare_image` parity), then returns the
+// LONGEST cycle (main contour), centred on its centroid.
 export function edgeToPath(pts) {
   if (!pts.length) return [];
-  const n = pts.length;
-  const ordered = new Array(n);
-  const used = new Uint8Array(n);
-  let cur = 0; used[0] = 1; ordered[0] = pts[0];
-  for (let k = 1; k < n; k++) {
-    let bi = -1, bd = Infinity, cx = pts[cur].x, cy = pts[cur].y;
-    for (let i = 0; i < n; i++) { if (used[i]) continue; const dx = pts[i].x - cx, dy = pts[i].y - cy; const d = dx * dx + dy * dy; if (d < bd) { bd = d; bi = i; } }
-    cur = bi; used[bi] = 1; ordered[k] = pts[bi];
+  const CELL = 8;
+  const grid = new Map();
+  const kof = (x, y) => ((Math.floor(y / CELL) * 4096) + (Math.floor(x / CELL) + 2048)) >>> 0;
+  for (let i = 0; i < pts.length; i++) {
+    const k = kof(pts[i].x, pts[i].y);
+    if (!grid.has(k)) grid.set(k, []);
+    grid.get(k).push(i);
   }
-  // centre
-  let sx = 0, sy = 0; for (const p of ordered) { sx += p.x; sy += p.y; }
-  const cxm = sx / n, cym = sy / n;
-  return ordered.map(p => ({ x: p.x - cxm, y: p.y - cym }));
+  const used = new Uint8Array(pts.length);
+  const cycles = [];
+  for (let start = 0; start < pts.length; start++) {
+    if (used[start]) continue;
+    const cycle = [pts[start]];
+    used[start] = 1;
+    let cx = pts[start].x, cy = pts[start].y;
+    let guard = 0;
+    for (;;) {
+      if (++guard > pts.length) break;
+      let bi = -1, bd = Infinity;
+      const gx = Math.floor(cx / CELL), gy = Math.floor(cy / CELL);
+      for (let dy = -3; dy <= 3 && bi < 0; dy++) {
+        for (let dx = -3; dx <= 3; dx++) {
+          const cell = grid.get((((gy + dy) * 4096) + (gx + dx + 2048)) >>> 0);
+          if (!cell) continue;
+          for (const idx of cell) {
+            if (used[idx]) continue;
+            const d = (pts[idx].x - cx) ** 2 + (pts[idx].y - cy) ** 2;
+            if (d < bd) { bd = d; bi = idx; }
+          }
+        }
+      }
+      if (bi < 0) break;                       // exhausted this cycle
+      if (Math.sqrt(bd) > 10) break;           // jump to another curve
+      used[bi] = 1;
+      cycle.push(pts[bi]);
+      cx = pts[bi].x; cy = pts[bi].y;
+    }
+    if (cycle.length >= 3) cycles.push(cycle);
+  }
+  // longest cycle = main contour (Fourier-Epicycles `main_curve_only`)
+  if (!cycles.length) return [];
+  cycles.sort((a, b) => b.length - a.length);
+  const longest = cycles[0];
+  let sx = 0, sy = 0; for (const p of longest) { sx += p.x; sy += p.y; }
+  const n = longest.length, cxm = sx / n, cym = sy / n;
+  return longest.map(p => ({ x: p.x - cxm, y: p.y - cym }));
 }
 
 // Full photo silhouette: RGBA -> centred ordered edge polyline.
+// Decimates dense edge sets (~2000 pts cap) so ordering stays fast.
 export function photoContour(data, w, h, edgeRatio = 0.15) {
   const plane = gaussianBlur(lumaPlane(data, w, h), w, h);
   const mag = sobelMagnitude(plane, w, h);
-  const pts = strongEdges(mag, w, h, edgeRatio);
+  let pts = strongEdges(mag, w, h, edgeRatio);
+  if (pts.length > 2000) {                    // cap the ordering cost
+    const step = Math.ceil(pts.length / 2000);
+    pts = pts.filter((_, i) => i % step === 0);
+  }
   return edgeToPath(pts);
 }

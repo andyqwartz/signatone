@@ -147,3 +147,19 @@ test('filterDecodable removes bins outside decoder range', () => {
   // amplitude-sorted desc preserved
   for (let i = 1; i < filtered.length; i++) assert.ok(filtered[i].amp <= filtered[i - 1].amp + 1e-12);
 });
+
+test('photoContour stays fast + ordered on a dense 256x256 photo', () => {
+  const w = 256, h = 256;
+  const data = photoRgba(w, h);
+  const t0 = Date.now();
+  const path = photoContour(data, w, h, 0.15);
+  const ms = Date.now() - t0;
+  assert.ok(path.length >= 100, `has contour (${path.length} pts)`);
+  assert.ok(ms < 3000, `photoContour < 3s (${ms}ms)`);
+  // ordered: few big jumps (single main contour selected)
+  let big = 0;
+  for (let i = 1; i < path.length; i++) {
+    if (Math.hypot(path[i].x - path[i-1].x, path[i].y - path[i-1].y) > 10) big++;
+  }
+  assert.ok(big < path.length * 0.05, `few big jumps (${big})`);
+});
