@@ -87,9 +87,10 @@
       <textarea id="msg" spellcheck="false" autocomplete="off" placeholder="The sound is the form."></textarea>
     </section>
     <section class="actions">
-      <button id="btn-weave" class="action">Weave</button>
-      <label id="btn-img" class="action file-label">α Image
+      <button id="btn-weave" class="action" title="Encode the plaintext into a signal WAV">Encode text</button>
+      <label id="btn-img" class="action file-label" title="Import an image as a silhouette">
         <input type="file" id="imgfile" accept="image/*">
+        Encode image
       </label>
     </section>
   </main>
@@ -98,8 +99,10 @@
   <main class="command" id="view-decode" hidden>
     <section class="field see">
       <label>signal</label>
-      <input type="file" id="file" accept=".wav,audio/wav">
-      <button id="btn-see" class="action inline">Upload &amp; See</button>
+      <label class="action inline file-label" id="btn-see" title="Choose a signal WAV to decode">
+        <input type="file" id="file" accept=".wav,audio/wav">
+        Choose signal
+      </label>
     </section>
   </main>
 
@@ -130,6 +133,6 @@
   <div class="seal" id="seal" hidden>◈ signal captured</div>
 
   <script src="js/vendor/gif.js"></script>
-  <script type="module" src="app.js?v=20260817k"></script>
+  <script type="module" src="app.js?v=20260817l"></script>
 </body>
 </html>

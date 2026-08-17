@@ -270,27 +270,29 @@ textarea::-webkit-scrollbar-thumb { background: var(--dim2); border-radius: 3px;
   .actions { flex-direction: row; border-left: none; border-top: var(--hair) solid var(--hair);
     margin-left: 0; padding-left: 0; margin-top: 12px; padding-top: 12px; }
   .action { flex: 1; text-align: center; }
-  textarea { width: 62vw; }
+  .field { min-width: 0; }
+  textarea { width: 100%; }
   .player { max-width: 92vw; }
 }
 
 /* ---- mobile layout (<720px): no top-bar overlap, panels full-width ---- */
 @media (max-width: 720px) {
-  .hud { top: 12px; left: 16px; }
-  .hud .brand { font-size: 15px; letter-spacing: 0.24em; }
-  .hud .sub { font-size: 8px; margin-top: 3px; }
-
-  .modes { top: 52px; }
-  .top-right { top: 50px; right: 16px; gap: 8px; }
+  /* top row: mode switch + settings buttons; logo/motto slide UNDER it */
+  .modes { top: 10px; }
+  .top-right { top: 6px; right: 14px; gap: 8px; }
   .settings-toggle { width: 32px; height: 32px; }
+
+  .hud { top: 58px; left: 16px; }
+  .hud .brand { font-size: 15px; letter-spacing: 0.2em; }
+  .hud .sub { font-size: 8px; margin-top: 3px; letter-spacing: 0.16em; white-space: nowrap; }
 
   /* panels: docked full-width under the top controls, never overlapped */
   .hidden-panel {
-    top: 92px;
+    top: 96px;
     right: 12px;
     left: 12px;
     width: auto;
-    max-height: calc(100vh - 120px);
+    max-height: calc(100vh - 130px);
   }
 
   .status { left: 16px; bottom: 10px; }

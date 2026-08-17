@@ -23,7 +23,7 @@ const $ = (id) => document.getElementById(id);
 const canvas = $('stage'), ctx = canvas.getContext('2d');
 const persistCanvas = document.createElement('canvas'), pctx = persistCanvas.getContext('2d');
 const statusEl = $('status');
-const btnWeave = $('btn-weave'), btnSee = $('btn-see');
+const btnWeave = $('btn-weave');
 const msgEl = $('msg'), fileEl = $('file');
 const sealEl = $('seal');
 const viewEncode = $('view-encode'), viewDecode = $('view-decode');
@@ -265,7 +265,7 @@ btnWeave.addEventListener('click', async () => {
 });
 
 /* ---------------- STAGE 2: DECODE ---------------- */
-btnSee.addEventListener('click', () => fileEl.click());
+// (#btn-see is a <label> wrapping #file — native tap opens the picker, iOS-safe)
 fileEl.addEventListener('change', async () => {
   const f = fileEl.files[0];
   if (!f) return;
@@ -338,9 +338,10 @@ wirePlayer(audioDecode, playDecode, scrubDecode, timeDecode);
 function autoResize() {
   msgEl.style.height = 'auto';
   msgEl.style.height = Math.min(msgEl.scrollHeight, innerHeight * 0.34) + 'px';
-  const longest = (msgEl.value || '').split('\n').reduce((m, l) => Math.max(m, l.length), 0);
-  const cw = Math.max(220, Math.min(innerWidth * 0.46, longest * 12));
-  msgEl.style.width = cw + 'px'; msgEl.style.maxWidth = '44vw';
+  const v = msgEl.value || msgEl.placeholder || '';
+  const longest = v.split('\n').reduce((m, l) => Math.max(m, l.length), 0);
+  const cw = Math.max(260, Math.min(innerWidth * 0.5, longest * 13));
+  msgEl.style.width = cw + 'px'; msgEl.style.maxWidth = '92vw';
   updateCommandVar();
 }
 msgEl.addEventListener('input', autoResize);
