@@ -68,6 +68,12 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+/* keep the audio player/export stacked above the command bar */
+function updateCommandVar() {
+  const cmd = document.querySelector('.command:not([hidden])') || document.querySelector('.command');
+  if (cmd) document.documentElement.style.setProperty('--cmd-h', cmd.offsetHeight + 'px');
+}
+
 /* ---------------- mode switch ---------------- */
 function setMode(m) {
   mode = m;
@@ -81,6 +87,7 @@ function setMode(m) {
   // only the active view's player shows
   playerEncode.hidden = playerEncode.hidden || m !== 'encode';
   playerDecode.hidden = playerDecode.hidden || m !== 'decode';
+  updateCommandVar();
 }
 btnModeEnc.addEventListener('click', () => setMode('encode'));
 btnModeDec.addEventListener('click', () => setMode('decode'));
@@ -248,6 +255,7 @@ btnWeave.addEventListener('click', async () => {
     setStatus('weaved → downloaded · message drawn');
     audioEncode.src = wavBlobUrl(buf); audioEncode.playbackRate = settings.audioTempo || 1;
     playerEncode.hidden = mode !== 'encode' ? true : false;
+    updateCommandVar();
     showGlyphs(chars.map(c => ({ coeffs: alphabet[c], trace: null })), () => setStatus('weaved → downloaded · message drawn'));
   } catch {
     btnWeave.disabled = false;
@@ -268,6 +276,7 @@ fileEl.addEventListener('change', async () => {
   audioDecode.volume = settings.audioVol != null ? settings.audioVol : 1;
   audioDecode.playbackRate = settings.audioTempo2 || 1;
   playerDecode.hidden = mode !== 'decode' ? true : false;
+  updateCommandVar();
   try {
     const { blocks } = await runWorker({ type: 'decode', buffer: buf }, [buf]);
     if (blocks.length > DECODE_CAP) { setStatus(`signal too large (${blocks.length} > ${DECODE_CAP})`); return; }
@@ -331,6 +340,7 @@ function autoResize() {
   const longest = (msgEl.value || '').split('\n').reduce((m, l) => Math.max(m, l.length), 0);
   const cw = Math.max(220, Math.min(innerWidth * 0.46, longest * 12));
   msgEl.style.width = cw + 'px'; msgEl.style.maxWidth = '44vw';
+  updateCommandVar();
 }
 msgEl.addEventListener('input', autoResize);
 autoResize();
@@ -443,6 +453,7 @@ imgfile.addEventListener('change', async () => {
     }, [buf]);
     if (!coeffs || !coeffs.length) { setStatus('no silhouette found'); return; }
     showGlyphs([{ coeffs, trace: null }]);
+    updateCommandVar();
     // weave the silhouette as a single decodable block (X/Y multiplex)
     const key = '\u0001';
     alphabet[key] = coeffs;
