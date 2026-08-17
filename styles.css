@@ -84,6 +84,7 @@ html, body {
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   max-width: 78vw;
   max-height: 44vh;
+  overflow: visible;
 }
 .field {
   display: flex;
@@ -100,7 +101,7 @@ html, body {
 }
 textarea {
   display: block;
-  width: 220px;
+  width: 100%;
   min-height: 52px;
   max-height: 34vh;
   background: transparent;
