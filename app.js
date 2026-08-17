@@ -123,8 +123,15 @@ function showGlyphs(glyphs, onDone, opts = {}) {
 }
 function stopAnim() { if (raf) cancelAnimationFrame(raf); raf = null; animState = null; }
 function recomputeLayout() {
+  // On mobile the fixed UI (header top, command+player bottom) covers part of
+  // the stage — inset the glyph band so the epicycles stay visible, never hidden
+  // behind the controls (the earlier bug: glyphs were centred on full height).
+  const mobile = innerWidth <= 720;
+  const topInset = mobile ? 150 : 0;          // header + mode switch
+  const bottomInset = mobile ? 210 : 0;       // command bar + player + downloads
   animState.layout = computeLayout(animState.glyphs.length, innerWidth, innerHeight,
-    { margin: 0.09, spacing: settings.spacing || 1.7, maxBox: 0.30, singleMax: settings.single || 14 });
+    { margin: 0.09, spacing: settings.spacing || 1.7, maxBox: 0.30, singleMax: settings.single || 14,
+      topInset, bottomInset });
 }
 function repaintPersist(st, settled) {
   pctx.clearRect(0, 0, innerWidth, innerHeight);
@@ -253,7 +260,7 @@ btnWeave.addEventListener('click', async () => {
   btnWeave.disabled = true;
   setStatus('weaving…');
   try {
-    const { samples } = await runWorker({ type: 'weave', text: chars.join(''),
+    const { samples, noisy } = await runWorker({ type: 'weave', text: chars.join(''),
       opts: { harmonics: settings.harmonics, noise: settings.noise, seed: settings.seed } });
     // decode-safe audio shaping: master gain (seer renormalises per-block peak)
     const g = settings.audioGain != null ? settings.audioGain : 1;
@@ -267,7 +274,12 @@ btnWeave.addEventListener('click', async () => {
     playerEncode.hidden = mode !== 'encode' ? true : false;
     updateCommandVar();
     showDock();
-    showGlyphs(chars.map(c => ({ coeffs: alphabet[c], trace: null })), () => setStatus('weaved · ready to download'));
+    // display the ACTUAL woven coefficients (noise-jittered), not the clean
+    // alphabet — so the noise slider visibly affects the encode epicycles
+    const woven = (noisy && noisy.length)
+      ? noisy.map(g => ({ coeffs: g, trace: null }))
+      : chars.map(c => ({ coeffs: alphabet[c], trace: null }));
+    showGlyphs(woven, () => setStatus('weaved · ready to download'));
   } catch {
     btnWeave.disabled = false;
     setStatus('weave failed');
@@ -548,7 +560,13 @@ function exportGIF() {
   const st = animState, gs = st.glyphs, layout = st.layout || [];
   const n = gs.length, per = st.per, drawMs = st.drawMs;
   const T = (n - 1) * per + drawMs;
-  const fps = 24, frames = Math.max(8, Math.min(180, Math.round((T / 1000) * fps)));
+  const fps = 24;
+  // Cap frames adaptively: a decoded image glyph carries hundreds of harmonics,
+  // and drawing that per frame × 180 frames is both slow and memory-heavy in the
+  // GIF worker. Large coeff sets get fewer frames so export completes reliably.
+  const maxCoeffs = Math.max(...gs.map(g => (g.coeffs ? g.coeffs.length : 0)));
+  const frameCap = maxCoeffs > 128 ? 60 : 180;
+  const frames = Math.max(8, Math.min(frameCap, Math.round((T / 1000) * fps)));
   setStatus('rendering gif…');
   const gif = new window.GIF({ workers: 2, quality: 10, workerScript: 'js/vendor/gif.worker.js' });
   const c = document.createElement('canvas');

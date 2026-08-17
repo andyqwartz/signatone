@@ -10,20 +10,27 @@
 //   spacing  : horizontal cell pitch expressed in box units (default 1.7)
 //   maxBox   : fraction of min(W,H) capping a single cell (default 0.30)
 //   singleMax: max letter count to force a single line (default 14)
+//   topInset / bottomInset : px of stage kept clear of glyphs (fixed UI bars).
+//     The usable band is the H minus these insets, vertically centred in it.
 export function computeLayout(n, W, H, opts = {}) {
   if (n <= 0) return [];
-  const margin = (opts.margin ?? 0.09) * Math.min(W, H);
+  const topInset = opts.topInset || 0;
+  const bottomInset = opts.bottomInset || 0;
+  const bandH = Math.max(1, H - topInset - bottomInset);
+  const margin = (opts.margin ?? 0.09) * Math.min(W, bandH);
   const sf = opts.spacing ?? 1.7;
-  const maxCell = (opts.maxBox ?? 0.30) * Math.min(W, H);
+  const maxCell = (opts.maxBox ?? 0.30) * Math.min(W, bandH);
   const capW = Math.max(1, W - 2 * margin);
-  const capH = Math.max(1, H - 2 * margin);
+  const capH = Math.max(1, bandH - 2 * margin);
   const singleMax = opts.singleMax ?? 14;
+  // vertical centre of the usable band (not the full screen)
+  const bandCenterY = topInset + bandH / 2;
 
   // --- single line rule: short messages read as one centered word ---
   if (n <= singleMax) {
     const box = Math.max(4, Math.min(maxCell, capH, capW / (n * sf)));
     const rowW = n * box * sf;
-    const y0 = (H - box) / 2;
+    const y0 = bandCenterY - box / 2;
     const x0 = (W - rowW) / 2;
     const pts = [];
     for (let i = 0; i < n; i++) {
@@ -45,7 +52,7 @@ export function computeLayout(n, W, H, opts = {}) {
   }
   const { rows, cols, box } = best;
   const blockH = rows * box;
-  const y0 = (H - blockH) / 2;
+  const y0 = bandCenterY - blockH / 2;
   const pts = [];
   for (let i = 0; i < n; i++) {
     const row = Math.floor(i / cols), col = i % cols;

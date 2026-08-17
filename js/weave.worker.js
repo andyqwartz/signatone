@@ -2,10 +2,10 @@
 //   {type:'weave', text, opts}            -> {type:'weave', samples}
 //   {type:'decode', buffer}               -> {type:'decode', blocks:[{coeffs}]}
 
-import { weaveBlocks } from './weaver.js';
-import { analyzeBlocks, detectKind } from './seer.js';
-import { decodeWavToFloat32 } from './wav.js';
-import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js';
+import { weaveBlocks } from './weaver.js?v=20260817q';
+import { analyzeBlocks, detectKind } from './seer.js?v=20260817q';
+import { decodeWavToFloat32 } from './wav.js?v=20260817q';
+import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js?v=20260817q';
 
 let alphabet = null;
 function nextPow2(n) { let p = 1; while (p < n) p <<= 1; return p; }
@@ -20,8 +20,11 @@ self.onmessage = async (e) => {
     if (type === 'weave') {
       const a = await getAlphabet();
       const { text, opts } = e.data;
-      const { samples } = weaveBlocks(text, a, opts || {});
-      self.postMessage({ type: 'weave', samples }, [samples.buffer]);
+      const { samples, noisy } = weaveBlocks(text, a, opts || {});
+      // return the exact woven (noise-jittered) coefficient set per letter so the
+      // encoder can display what was actually encoded — otherwise the encode view
+      // shows the clean alphabet and the noise slider appears to do nothing.
+      self.postMessage({ type: 'weave', samples, noisy }, [samples.buffer]);
     } else if (type === 'decode') {
       const samples = decodeWavToFloat32(e.data.buffer);
       const kind = detectKind(samples);

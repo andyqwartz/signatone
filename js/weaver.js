@@ -35,30 +35,36 @@ export function weaveBlocks(text, alphabet, opts = {}) {
   const preFreq = (opts.preImage ? markFreq() : SGFConfig.f0);
   put((n)=>{ const t=n/SGFConfig.sampleRate; return Math.sin(2*Math.PI*preFreq*t)*0.8; }, pre);
 
+  // The EXACT jittered coefficient set used for each letter, so the encoder
+  // can also display what was actually woven (noise visible in the epicycles)
+  const noisy = [];
+
   for (const c of text) {
     const harm = (alphabet[c] || []).slice(0, maxHarms);   // amplitude-sorted already
     const startIdx = idx;
-    // each letter gets its OWN random noise amplitude in [0, noiseMax]  (always differs)
-    const letterNoise = noiseMax * rng();                    // 0..1 per letter
-    // ALSO jitter each sine's amp + phase (seeded rng) so the noise survives
-    // into the decoded coefficients and is visible in the rendered epicycles
-    // (the additive dither alone is largely rejected by the Goertzel corr).
-    const ampJitter = harm.map(() => 1 + noiseMax * (rng() * 2 - 1));
-    const phJitter = harm.map(() => noiseMax * (rng() * 2 - 1) * 1.2);
-    // synthesize X (real part) and Y (imag) halves
+    // per-letter additive dither amplitude (audible texture)
+    const letterNoise = noiseMax * rng();
+    // The EXACT jittered coefficient set used for each letter, so the encoder
+    // can also display what was actually woven (noise visible in the epicycles)
+    const letterCoeffs = harm.map((h) => {
+      // amp jitter + phase jitter per harmonic (seeded, deterministic)
+      const amp = h.amp * (1 + noiseMax * (rng() * 2 - 1));
+      const phase = h.phase + noiseMax * (rng() * 2 - 1) * 1.2;
+      return { k: h.k, amp, phase };
+    });
+    noisy.push(letterCoeffs);
+    // synthesize X (real part) and Y (imag) halves using the jittered sines
     const xr = new Float32Array(plen);
     const yr = new Float32Array(plen);
     for (let i=0;i<plen;i++){
       const t=i/SGFConfig.sampleRate;
       let x=0, y=0;
-      for (let j=0;j<harm.length;j++){
-        const h = harm[j];
-        const a = 2*Math.PI*h.k*SGFConfig.f0*t + h.phase + phJitter[j];
-        const amp = h.amp * ampJitter[j];
-        x += amp*Math.cos(a);   // Re{ e^i(...) }
-        y += amp*Math.sin(a);   // Im{ e^i(...) }
+      for (let j=0;j<letterCoeffs.length;j++){
+        const a = 2*Math.PI*letterCoeffs[j].k*SGFConfig.f0*t + letterCoeffs[j].phase;
+        x += letterCoeffs[j].amp*Math.cos(a);   // Re{ e^i(...) }
+        y += letterCoeffs[j].amp*Math.sin(a);   // Im{ e^i(...) }
       }
-      // deterministic per-letter noise, DIFFERENT value at every sample (thick water/dither)
+      // additive per-sample dither (audible "thick water" texture)
       const nv = (rng()*2-1) * letterNoise;
       xr[i]=x+nv; yr[i]=y+nv;
     }
@@ -73,7 +79,7 @@ export function weaveBlocks(text, alphabet, opts = {}) {
     put((n)=>{ const t=n/SGFConfig.sampleRate; return Math.sin(2*Math.PI*markFreq()*t)*0.5; }, markLen);
   }
 
-  return { samples: new Float32Array(samples), letters: [...text], markers };
+  return { samples: new Float32Array(samples), letters: [...text], markers, noisy };
 }
 
 // deterministic seeded RNG so "always different per letter" is reproducible per run/n.
