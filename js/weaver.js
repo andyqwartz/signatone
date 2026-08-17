@@ -38,10 +38,11 @@ export function weaveBlocks(text, alphabet, opts = {}) {
   for (const c of text) {
     const harm = (alphabet[c] || []).slice(0, maxHarms);   // amplitude-sorted already
     const startIdx = idx;
-    // noise applied TO THE SINES: each letter gets deterministic per-harmonic
-    // amplitude + phase jitter (seeded rng). This propagates into the decoded
-    // coefficients, so the epicycles visibly deform (organic blur), unlike the
-    // old additive dither which Goertzel rejected as orthogonal noise.
+    // each letter gets its OWN random noise amplitude in [0, noiseMax]  (always differs)
+    const letterNoise = noiseMax * rng();                    // 0..1 per letter
+    // ALSO jitter each sine's amp + phase (seeded rng) so the noise survives
+    // into the decoded coefficients and is visible in the rendered epicycles
+    // (the additive dither alone is largely rejected by the Goertzel corr).
     const ampJitter = harm.map(() => 1 + noiseMax * (rng() * 2 - 1));
     const phJitter = harm.map(() => noiseMax * (rng() * 2 - 1) * 1.2);
     // synthesize X (real part) and Y (imag) halves
@@ -57,7 +58,9 @@ export function weaveBlocks(text, alphabet, opts = {}) {
         x += amp*Math.cos(a);   // Re{ e^i(...) }
         y += amp*Math.sin(a);   // Im{ e^i(...) }
       }
-      xr[i]=x; yr[i]=y;
+      // deterministic per-letter noise, DIFFERENT value at every sample (thick water/dither)
+      const nv = (rng()*2-1) * letterNoise;
+      xr[i]=x+nv; yr[i]=y+nv;
     }
     // normalize both halves together to TARGET_PEAK (keeps relative shape)
     let peak = 1e-9;
