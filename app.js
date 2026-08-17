@@ -48,7 +48,7 @@ const settings = loadSettings();
 
 function loadSettings() {
   const def = { harmonics: 10, noise: 0, seed: 12345, speed: 1, spacing: 1.7, single: 14,
-    accent: '#E8A33D', glow: true, audioGain: 1, audioTempo: 1, audioVol: 1, audioTempo2: 1,
+    accent: '#7e61d4', glow: true, audioGain: 1, audioTempo: 1, audioVol: 1, audioTempo2: 1,
     imgThreshold: 128, imgSample: 1024, imgHarms: 1024, imgMode: 'auto', imgMain: false };
   try { return Object.assign(def, JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}); }
   catch { return def; }
@@ -131,7 +131,7 @@ function strokeGlyph(tctx, g, L, color, alpha) {
 function drawLive(g, L, t, frac, color, tctx = ctx) {
   if (!g.coeffs.length) return;
   tctx.save();
-  if (settings.glow) { tctx.shadowColor = 'rgba(232,163,61,0.35)'; tctx.shadowBlur = 10; }
+  if (settings.glow) { tctx.shadowColor = 'rgba(126,97,212,0.35)'; tctx.shadowBlur = 10; }
   EPI.drawEpicycleFrame(tctx, g.coeffs, g.trace, t, L.cx, L.cy, L.box, color, frac);
   tctx.restore();
 }

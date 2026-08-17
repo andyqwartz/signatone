@@ -1,12 +1,12 @@
 :root {
-  /* SIGNATONE — warm night-spectrograph palette (no cyan) */
+  /* SIGNATONE — warm night-spectrograph palette */
   --bg: #0A0806;
   --ground: #0E0B08;
   --os: #EAE2D4;                 /* bone white */
   --dim: rgba(234, 226, 212, 0.40);
   --dim2: rgba(234, 226, 212, 0.16);
-  --ember: #E8A33D;              /* trace accent */
-  --ember-soft: rgba(232, 163, 61, 0.35);
+  --ember: #7e61d4;              /* trace accent */
+  --ember-soft: rgba(126, 97, 212, 0.35);
   --hair: rgba(234, 226, 212, 0.16);
   --disp: "Space Grotesk", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
@@ -22,8 +22,8 @@ html, body {
   font-family: var(--disp);
   letter-spacing: 0.02em;
   background-image:
-    radial-gradient(circle at 50% 38%, rgba(232, 163, 61, 0.06), rgba(10, 8, 6, 0) 62%),
-    radial-gradient(circle at 84% 70%, rgba(232, 163, 61, 0.03), rgba(10, 8, 6, 0) 55%);
+    radial-gradient(circle at 50% 38%, rgba(126, 97, 212, 0.06), rgba(10, 8, 6, 0) 62%),
+    radial-gradient(circle at 84% 70%, rgba(126, 97, 212, 0.03), rgba(10, 8, 6, 0) 55%);
 }
 
 #stage {
@@ -54,7 +54,7 @@ html, body {
 .hud .brand .sigil {
   color: var(--ember);
   font-size: 0.86em;
-  filter: drop-shadow(0 0 6px rgba(232, 163, 61, 0.55));
+  filter: drop-shadow(0 0 6px rgba(126, 97, 212, 0.55));
 }
 .hud .sub {
   margin-top: 6px;
@@ -149,7 +149,7 @@ textarea::-webkit-scrollbar-thumb { background: var(--dim2); border-radius: 3px;
   border-color: var(--ember);
   color: var(--ember);
   box-shadow: 0 0 14px var(--ember-soft);
-  background: rgba(232, 163, 61, 0.06);
+  background: rgba(126, 97, 212, 0.06);
 }
 .action:disabled { opacity: 0.4; pointer-events: none; }
 
