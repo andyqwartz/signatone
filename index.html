@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SIGNATONE</title>
+<meta name="description" content="SIGNATONE — the sound is the form. Text and images woven into signal, decoded as living Fourier epicycles.">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap" rel="stylesheet">
@@ -82,10 +84,11 @@
     </section>
     <section class="actions">
       <button id="btn-weave" class="action">Weave</button>
-      <button id="btn-img" class="action">α Image</button>
+      <label id="btn-img" class="action file-label">α Image
+        <input type="file" id="imgfile" accept="image/*">
+      </label>
       <button id="btn-export" class="action ghost">⇩ img</button>
       <button id="btn-txt" class="action ghost" hidden>↓ txt</button>
-      <input type="file" id="imgfile" accept="image/*" hidden>
     </section>
   </main>
 
@@ -128,6 +131,6 @@
   <div class="seal" id="seal" hidden>◈ signal captured</div>
 
   <script src="js/vendor/gif.js"></script>
-  <script type="module" src="app.js?v=20260817h"></script>
+  <script type="module" src="app.js?v=20260817i"></script>
 </body>
 </html>

@@ -433,7 +433,8 @@ btnImgOpt.addEventListener('click', () => { imgPanel.hidden = !imgPanel.hidden; 
 btnCloseImg.addEventListener('click', () => { imgPanel.hidden = true; saveSettings(); });
 
 // image -> silhouette -> epicycles (render) + single-block WAV (decodable)
-btnImg.addEventListener('click', () => imgfile.click());
+// (the α Image control is a <label> wrapping #imgfile — native tap opens the picker,
+//  avoiding the iOS display:none + .click() failure)
 imgfile.addEventListener('change', async () => {
   const f = imgfile.files[0];
   if (!f) return;

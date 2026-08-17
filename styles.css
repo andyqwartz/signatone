@@ -167,10 +167,6 @@ textarea::-webkit-scrollbar-thumb { background: var(--dim2); border-radius: 3px;
 
 /* ---- settings gear ---- */
 .settings-toggle {
-  position: fixed;
-  top: 20px;
-  right: 28px;
-  z-index: 25;
   width: 34px; height: 34px;
   border-radius: 50%;
   background: rgba(14, 11, 8, 0.5);
@@ -180,6 +176,7 @@ textarea::-webkit-scrollbar-thumb { background: var(--dim2); border-radius: 3px;
   display: flex; align-items: center; justify-content: center;
   backdrop-filter: blur(4px);
   transition: color 0.25s, border-color 0.25s, box-shadow 0.25s;
+  flex: 0 0 auto;
 }
 .settings-toggle:hover { color: var(--ember); border-color: var(--ember); box-shadow: 0 0 10px var(--ember-soft); }
 .settings-toggle svg { display: block; }
@@ -256,6 +253,39 @@ textarea::-webkit-scrollbar-thumb { background: var(--dim2); border-radius: 3px;
   .player { max-width: 92vw; }
 }
 
+/* ---- mobile layout (<720px): no top-bar overlap, panels full-width ---- */
+@media (max-width: 720px) {
+  .hud { top: 12px; left: 16px; }
+  .hud .brand { font-size: 15px; letter-spacing: 0.24em; }
+  .hud .sub { font-size: 8px; margin-top: 3px; }
+
+  .modes { top: 52px; }
+  .top-right { top: 50px; right: 16px; gap: 8px; }
+  .settings-toggle { width: 32px; height: 32px; }
+
+  /* panels: docked full-width under the top controls, never overlapped */
+  .hidden-panel {
+    top: 92px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-height: calc(100vh - 120px);
+  }
+
+  .status { left: 16px; bottom: 10px; }
+
+  /* command bar sits above the home indicator area */
+  .command { bottom: 12px; }
+}
+
+/* ---- narrow phones (<430px): compact header row ---- */
+@media (max-width: 430px) {
+  .hud .sub { display: none; }
+  .top-right { gap: 6px; }
+  .modes { padding: 2px; }
+  .mode-btn { padding: 5px 11px; font-size: 8px; }
+}
+
 /* ===================== ENCODE / DECODE modes ===================== */
 .modes {
   position: fixed;
@@ -295,7 +325,6 @@ textarea::-webkit-scrollbar-thumb { background: var(--dim2); border-radius: 3px;
   display: flex;
   gap: 10px;
 }
-.settings-toggle.audio { color: rgba(234, 226, 212, 0.55); }
 .settings-toggle.audio:hover { color: var(--ember); border-color: var(--ember); box-shadow: 0 0 10px var(--ember-soft); }
 
 /* contextual audio groups follow the active mode */
@@ -307,6 +336,21 @@ body.mode-encode [data-aud="dec"] { display: none; }
   opacity: 0.5;
   font-size: 10px;
   padding: 8px 12px;
+}
+/* file picker: the label carries the visible text; the input is hidden with
+   opacity (not display:none) so a native tap on iOS opens the picker */
+.file-label {
+  position: relative;
+  cursor: pointer;
+}
+.file-label input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
 }
 .action.ghost:hover { opacity: 1; }
 .action.inline { margin-top: 10px; }
