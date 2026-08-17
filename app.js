@@ -48,7 +48,8 @@ const settings = loadSettings();
 
 function loadSettings() {
   const def = { harmonics: 10, noise: 0, seed: 12345, speed: 1, spacing: 1.7, single: 14,
-    accent: '#E8A33D', glow: true, audioGain: 1, audioTempo: 1, audioVol: 1, audioTempo2: 1 };
+    accent: '#E8A33D', glow: true, audioGain: 1, audioTempo: 1, audioVol: 1, audioTempo2: 1,
+    imgThreshold: 128, imgSample: 1024, imgHarms: 1024, imgMode: 'auto', imgMain: false };
   try { return Object.assign(def, JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}); }
   catch { return def; }
 }
@@ -391,7 +392,71 @@ for (const k of ['gain','tempo','vol','tempo2']) aEls[k].range.onchange = saveSe
 btnAudio.addEventListener('click', () => { audioPanel.hidden = !audioPanel.hidden; if (!audioPanel.hidden) applyAudioControls(); });
 btnCloseAudio.addEventListener('click', () => { audioPanel.hidden = true; saveSettings(); });
 
-applyControls(); applyAudioControls();
+/* ---------------- image config (silhouette) ---------------- */
+const imgPanel = $('img-options'), btnImgOpt = $('btn-img-opt'), btnCloseImg = $('btn-close-img');
+const btnImg = $('btn-img'), imgfile = $('imgfile');
+const iEls = {
+  threshold: { range: $('set-img-threshold'), out: $('o-img-threshold') },
+  sample: { range: $('set-img-sample'), out: $('o-img-sample') },
+  harms: { range: $('set-img-harms'), out: $('o-img-harms') },
+  mode: { range: $('set-img-mode'), out: $('o-img-mode') },
+  main: { range: $('set-img-main'), out: null },
+};
+function applyImgControls() {
+  iEls.threshold.out.textContent = settings.imgThreshold; iEls.threshold.range.value = settings.imgThreshold;
+  iEls.sample.out.textContent = settings.imgSample; iEls.sample.range.value = String(settings.imgSample);
+  iEls.harms.out.textContent = settings.imgHarms; iEls.harms.range.value = settings.imgHarms;
+  iEls.mode.out.textContent = settings.imgMode; iEls.mode.range.value = settings.imgMode;
+  iEls.main.range.checked = !!settings.imgMain;
+}
+iEls.threshold.range.oninput = () => { settings.imgThreshold = +iEls.threshold.range.value; iEls.threshold.out.textContent = settings.imgThreshold; };
+iEls.sample.range.onchange = () => { settings.imgSample = +iEls.sample.range.value; iEls.sample.out.textContent = settings.imgSample; saveSettings(); };
+iEls.harms.range.oninput = () => { settings.imgHarms = +iEls.harms.range.value; iEls.harms.out.textContent = settings.imgHarms; };
+iEls.mode.range.onchange = () => { settings.imgMode = iEls.mode.range.value; iEls.mode.out.textContent = settings.imgMode; saveSettings(); };
+iEls.main.range.onchange = () => { settings.imgMain = iEls.main.range.checked; saveSettings(); };
+iEls.threshold.range.onchange = saveSettings;
+iEls.harms.range.onchange = saveSettings;
+btnImgOpt.addEventListener('click', () => { imgPanel.hidden = !imgPanel.hidden; if (!imgPanel.hidden) applyImgControls(); });
+btnCloseImg.addEventListener('click', () => { imgPanel.hidden = true; saveSettings(); });
+
+// image -> silhouette -> epicycles (render) + single-block WAV (decodable)
+btnImg.addEventListener('click', () => imgfile.click());
+imgfile.addEventListener('change', async () => {
+  const f = imgfile.files[0];
+  if (!f) return;
+  setStatus('silhouette…');
+  try {
+    const bmp = await createImageBitmap(f);
+    const c = document.createElement('canvas');
+    c.width = Math.min(bmp.width, 640); c.height = Math.min(bmp.height, 640);
+    const cx = c.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(bmp, 0, 0, c.width, c.height);
+    const id = cx.getImageData(0, 0, c.width, c.height);
+    const buf = id.data.buffer.slice(0);
+    const { coeffs } = await runWorker({
+      type: 'silhouette', buffer: buf, w: c.width, h: c.height,
+      threshold: settings.imgThreshold, mode: settings.imgMode,
+      mainOnly: settings.imgMain, sample: settings.imgSample, maxHarms: settings.imgHarms,
+    }, [buf]);
+    if (!coeffs || !coeffs.length) { setStatus('no silhouette found'); return; }
+    showGlyphs([{ coeffs, trace: null }]);
+    // weave the silhouette as a single decodable block (X/Y multiplex)
+    const key = '\u0001';
+    alphabet[key] = coeffs;
+    try {
+      const { samples } = await runWorker({ type: 'weave', text: key,
+        opts: { harmonics: Math.min(coeffs.length, 512), noise: 0, seed: 0 } });
+      const wav = encodeWav(samples, SGFConfig.sampleRate);
+      triggerDownload(wav);
+      setStatus('image → silhouette · wav downloaded');
+    } finally { delete alphabet[key]; }
+  } catch (e) {
+    setStatus('silhouette failed');
+    console.error(e);
+  }
+});
+
+applyControls(); applyAudioControls(); applyImgControls();
 setMode('encode');
 
 // expose for tests/debug

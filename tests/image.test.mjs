@@ -79,3 +79,15 @@ test('DFT roundtrip: coeffs reconstruct the resampled path closely', () => {
   // naive DFT with all significant bins reconstructs almost exactly
   assert.ok(maxErr < 1e-6, `roundtrip error ${maxErr} < 1e-6`);
 });
+
+import { maskFromImageData } from '../js/image.js';
+test('maskFromImageData: alpha + luma', () => {
+  const w = 3, h = 1; const data = new Uint8ClampedArray(w * h * 4);
+  data[0]=0; data[1]=0; data[2]=0; data[3]=255;
+  data[4]=10; data[5]=20; data[6]=30; data[7]=0;
+  data[8]=128; data[9]=128; data[10]=128; data[11]=255;
+  const a = maskFromImageData(data, w, h, 128, 'alpha');
+  assert.deepEqual([...a.mask], [1, 0, 1]);
+  const l = maskFromImageData(data, w, h, 100, 'luma');
+  assert.deepEqual([...l.mask], [1, 1, 0]);
+});

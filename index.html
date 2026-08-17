@@ -32,6 +32,9 @@
     <button class="settings-toggle audio" id="btn-audio" title="audio" aria-label="audio">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1"><path d="M2 6v4 M5 4v8 M8 2v12 M11 4v8 M14 6v4" stroke-linecap="round"/></svg>
     </button>
+    <button class="settings-toggle audio" id="btn-img-opt" title="image" aria-label="image">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1"><rect x="2" y="3" width="12" height="10" rx="1"/><circle cx="11.2" cy="6.2" r="1.1"/><path d="M2 12l3.5-3.5 2.5 2.5 3-3L14 12"/></svg>
+    </button>
   </div>
 
   <!-- signal configuration -->
@@ -58,6 +61,19 @@
     <button id="btn-close-audio">close</button>
   </aside>
 
+  <!-- image configuration -->
+  <aside class="hidden-panel" id="img-options" hidden>
+    <h2>image · silhouette</h2>
+    <div class="grp"><label>threshold <output id="o-img-threshold">128</output></label><input type="range" id="set-img-threshold" min="10" max="245" step="1" value="128"></div>
+    <div class="grp"><label>sample <output id="o-img-sample">1024</output></label>
+      <select id="set-img-sample"><option value="512">512</option><option value="1024" selected>1024</option><option value="2048">2048</option></select></div>
+    <div class="grp"><label>harmonics <output id="o-img-harms">1024</output></label><input type="range" id="set-img-harms" min="128" max="1024" step="64" value="1024"></div>
+    <div class="grp"><label>source <output id="o-img-mode">auto</output></label>
+      <select id="set-img-mode"><option value="auto" selected>auto</option><option value="alpha">alpha</option><option value="luma">luma</option></select></div>
+    <div class="grp grp-chk"><label class="chk"><input type="checkbox" id="set-img-main"> main curve only</label></div>
+    <button id="btn-close-img">close</button>
+  </aside>
+
   <!-- ENCODE view -->
   <main class="command" id="view-encode">
     <section class="field weave">
@@ -66,7 +82,9 @@
     </section>
     <section class="actions">
       <button id="btn-weave" class="action">Weave</button>
+      <button id="btn-img" class="action">α Image</button>
       <button id="btn-txt" class="action ghost" hidden>↓ txt</button>
+      <input type="file" id="imgfile" accept="image/*" hidden>
     </section>
   </main>
 

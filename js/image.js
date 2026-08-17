@@ -12,18 +12,19 @@
 //
 // Everything here is pure and unit-tested in tests/image.test.mjs.
 
-// 1) Binary mask from raw RGBA (ImageData). Prefers alpha when it carries real
-//    silhouette info (varies); otherwise thresholds luminance.
-export function maskFromImageData(data, w, h, threshold = 128) {
+// 1) Binary mask from raw RGBA (ImageData). mode: 'auto' (use alpha only when
+//    it varies), 'alpha' (force alpha), 'luma' (force luminance threshold).
+export function maskFromImageData(data, w, h, threshold = 128, mode = 'auto') {
   const mask = new Uint8Array(w * h);
-  let alphaVaries = false, a0 = -1, aN = -1;
-  for (let i = 0; i < w * h; i++) { const a = data[i * 4 + 3]; if (a0 < 0) a0 = a; if (a !== a0) alphaVaries = true; aN = a; }
+  let alphaVaries = false, a0 = -1;
+  for (let i = 0; i < w * h; i++) { const a = data[i * 4 + 3]; if (a0 < 0) a0 = a; if (a !== a0) alphaVaries = true; }
+  const useAlpha = mode === 'alpha' || (mode === 'auto' && alphaVaries);
   for (let i = 0; i < w * h; i++) {
     const px = i * 4;
-    if (alphaVaries) { mask[i] = data[px + 3] > threshold ? 1 : 0; }
+    if (useAlpha) mask[i] = data[px + 3] > threshold ? 1 : 0;
     else { const lum = 0.299 * data[px] + 0.587 * data[px + 1] + 0.114 * data[px + 2]; mask[i] = lum < threshold ? 1 : 0; }
   }
-  return { mask, alphaVaries };
+  return { mask };
 }
 
 // 2) Marching squares: binary mask (row-major, value 0/1) -> array of closed
