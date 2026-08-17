@@ -83,6 +83,7 @@
     <section class="actions">
       <button id="btn-weave" class="action">Weave</button>
       <button id="btn-img" class="action">α Image</button>
+      <button id="btn-export" class="action ghost">⇩ img</button>
       <button id="btn-txt" class="action ghost" hidden>↓ txt</button>
       <input type="file" id="imgfile" accept="image/*" hidden>
     </section>
@@ -96,6 +97,7 @@
       <button id="btn-see" class="action inline">Upload &amp; See</button>
     </section>
     <section class="actions">
+      <button id="btn-export2" class="action ghost">⇩ img</button>
       <button id="btn-txt2" class="action ghost" hidden>↓ txt</button>
     </section>
   </main>
@@ -116,9 +118,16 @@
 
   <div class="status" id="status">—</div>
 
+  <!-- export panel -->
+  <div class="export-panel" id="export-panel" hidden>
+    <button id="exp-png" class="action ghost">still PNG</button>
+    <button id="exp-gif" class="action ghost">animate GIF</button>
+  </div>
+
   <!-- quiet confirmation -->
   <div class="seal" id="seal" hidden>◈ signal captured</div>
 
-  <script type="module" src="app.js?v=20260817f"></script>
+  <script src="js/vendor/gif.js"></script>
+  <script type="module" src="app.js?v=20260817g"></script>
 </body>
 </html>

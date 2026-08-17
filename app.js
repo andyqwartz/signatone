@@ -106,24 +106,27 @@ function recomputeLayout() {
 }
 function repaintPersist(st, settled) {
   pctx.clearRect(0, 0, innerWidth, innerHeight);
-  pctx.lineWidth = 0.6; pctx.strokeStyle = OS; pctx.globalAlpha = 0.5;
   for (let i = 0; i < settled; i++) {
     const g = st.glyphs[i], L = st.layout[i];
     if (!g || !L || !g.coeffs.length) continue;
-    const tr = g.trace, s = L.box * 0.85 / (traceSpan(tr) || 1);
-    pctx.beginPath();
-    for (let j = 0; j < tr.length; j++) { const dx = L.cx + tr[j][0] * s, dy = L.cy + tr[j][1] * s; j ? pctx.lineTo(dx, dy) : pctx.moveTo(dx, dy); }
-    pctx.closePath(); pctx.stroke();
+    strokeGlyph(pctx, g, L, OS, 0.5);
   }
-  pctx.globalAlpha = 1;
 }
 function traceSpan(tr) { let mx=1e9,Mx=-1e9,my=1e9,My=-1e9; for (const [x,y] of tr){ if(x<mx)mx=x; if(x>Mx)Mx=x; if(y<my)my=y; if(y>My)My=y; } return Math.max(Mx-mx,My-my); }
-function drawLive(g, L, t, frac, color) {
+function strokeGlyph(tctx, g, L, color, alpha) {
+  const tr = g.trace; if (!tr || !tr.length) return;
+  const s = L.box * 0.85 / (traceSpan(tr) || 1);
+  tctx.save(); tctx.lineWidth = 0.6; tctx.strokeStyle = color; tctx.globalAlpha = alpha;
+  tctx.beginPath();
+  for (let j = 0; j < tr.length; j++) { const dx = L.cx + tr[j][0] * s, dy = L.cy + tr[j][1] * s; j ? tctx.lineTo(dx, dy) : tctx.moveTo(dx, dy); }
+  tctx.closePath(); tctx.stroke(); tctx.restore();
+}
+function drawLive(g, L, t, frac, color, tctx = ctx) {
   if (!g.coeffs.length) return;
-  ctx.save();
-  if (settings.glow) { ctx.shadowColor = 'rgba(232,163,61,0.35)'; ctx.shadowBlur = 10; }
-  EPI.drawEpicycleFrame(ctx, g.coeffs, g.trace, t, L.cx, L.cy, L.box, color, frac);
-  ctx.restore();
+  tctx.save();
+  if (settings.glow) { tctx.shadowColor = 'rgba(232,163,61,0.35)'; tctx.shadowBlur = 10; }
+  EPI.drawEpicycleFrame(tctx, g.coeffs, g.trace, t, L.cx, L.cy, L.box, color, frac);
+  tctx.restore();
 }
 canvas.addEventListener('mousemove', (e) => {
   if (!animState) return;
@@ -457,6 +460,52 @@ imgfile.addEventListener('change', async () => {
 });
 
 applyControls(); applyAudioControls(); applyImgControls();
+
+/* ---------------- export (PNG still / GIF animate) ---------------- */
+const btnExport = $('btn-export'), btnExport2 = $('btn-export2'), exportPanel = $('export-panel');
+const expPng = $('exp-png'), expGif = $('exp-gif');
+function toggleExport() { exportPanel.hidden = !exportPanel.hidden; }
+btnExport.addEventListener('click', toggleExport);
+btnExport2.addEventListener('click', toggleExport);
+expPng.addEventListener('click', exportPNG);
+expGif.addEventListener('click', exportGIF);
+function downloadBlob(name, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+function exportPNG() {
+  if (!animState) { setStatus('nothing to export'); return; }
+  exportPanel.hidden = true;
+  canvas.toBlob(b => { downloadBlob('signatone_trace.png', b); setStatus('png exported'); }, 'image/png');
+}
+function exportGIF() {
+  if (!animState) { setStatus('nothing to export'); return; }
+  if (!window.GIF) { setStatus('gif encoder unavailable'); return; }
+  exportPanel.hidden = true;
+  const st = animState, gs = st.glyphs, layout = st.layout || [];
+  const n = gs.length, per = st.per, drawMs = st.drawMs;
+  const T = (n - 1) * per + drawMs;
+  const fps = 24, frames = Math.max(8, Math.min(180, Math.round((T / 1000) * fps)));
+  setStatus('rendering gif…');
+  const gif = new window.GIF({ workers: 2, quality: 10, workerScript: 'js/vendor/gif.worker.js' });
+  const c = document.createElement('canvas');
+  c.width = canvas.width; c.height = canvas.height;
+  const x = c.getContext('2d');
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = innerWidth, H = innerHeight;
+  for (let f = 0; f < frames; f++) {
+    const e = T * (f / Math.max(1, frames - 1));
+    x.clearRect(0, 0, W, H);
+    x.fillStyle = '#0A0806'; x.fillRect(0, 0, W, H);
+    for (let i = 0; i < n; i++) if (e >= i * per + drawMs && gs[i].coeffs.length) strokeGlyph(x, gs[i], layout[i], OS, 0.9);
+    for (let i = 0; i < n; i++) if (e >= i * per && e < i * per + drawMs) drawLive(gs[i], layout[i], (e - i * per) / drawMs % 1, Math.min(1, (e - i * per) / drawMs), settings.accent, x);
+    gif.addFrame(c, { delay: Math.round(1000 / fps), copy: true });
+  }
+  gif.on('finished', (blob) => { downloadBlob('signatone_epicycles.gif', blob); setStatus('gif exported'); });
+  gif.render();
+}
 setMode('encode');
 
 // expose for tests/debug

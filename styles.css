@@ -353,3 +353,20 @@ body.mode-encode [data-aud="dec"] { display: none; }
   color: var(--dim);
   white-space: nowrap;
 }
+
+/* ===================== export panel ===================== */
+.export-panel {
+  position: fixed;
+  bottom: 178px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border: var(--hair) solid var(--hair);
+  border-radius: 12px;
+  background: rgba(14, 11, 8, 0.82);
+  backdrop-filter: blur(8px);
+}
+.export-panel .action.ghost { white-space: nowrap; }
