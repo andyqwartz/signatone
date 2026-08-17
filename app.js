@@ -101,12 +101,15 @@ function normalizeTrace(trace) {
   const cx=(mnx+mxx)/2, cy=(mny+mxy)/2, span=Math.max(mxx-mnx, mxy-mny)||1;
   return trace.map(([x,y])=>[(x-cx)/span,(y-cy)/span]);
 }
-function showGlyphs(glyphs, onDone) {
+function showGlyphs(glyphs, onDone, opts = {}) {
   stopAnim();
-  const harmos = Math.min(settings.harmonics || 10, 64);
+  // opts.harmos (optional): override the harmonic count for this render.
+  // Images carry up to ~1024 coeffs; defaulting to the text harmonics (10)
+  // would render them as a coarse blob — pass the full count for precision.
+  const harmos = opts.harmos != null ? opts.harmos : Math.min(settings.harmonics || 10, 64);
   const gs = glyphs.map(g => {
-    const coeffs = (g.coeffs || []).slice(0, harmos);
-    return { _fullCoefs: (g.coeffs || []).slice(), coeffs, trace: normalizeTrace(EPI.tracePoints(coeffs, 300)) };
+    const full = (g.coeffs || []).slice();
+    return { _fullCoefs: full, coeffs: full.slice(0, harmos), trace: normalizeTrace(EPI.tracePoints(full.slice(0, harmos), 300)) };
   });
   const sp = Math.max(0.25, settings.speed || 1);
   animState = { glyphs: gs, start: performance.now(), onDone: onDone || null,
@@ -219,9 +222,13 @@ function downloadTxt(name, text) {
 }
 function offerEncodeText(text) { tx = { kind: 'encode', text }; downloadDock.hidden = false; btnDownloadTxt.hidden = false; if (animState) showDock(); }
 function offerDecodeBlocks(blocks) { tx = { kind: 'decode', blocks }; downloadDock.hidden = false; btnDownloadTxt.hidden = false; if (animState) showDock(); }
+// a decoded image silhouette: no text transcription (the download dock's txt
+// stays hidden — the signal is the drawing).
+function offerImage() { tx = { kind: 'image' }; downloadDock.hidden = false; }
 function transcribe() {
   if (!tx) return '';
   if (tx.kind === 'encode') return tx.text;
+  if (tx.kind === 'image') return '[image silhouette]';
   return tx.blocks.map(b => bestGlyph(b.coeffs)).join('');
 }
 
@@ -279,8 +286,17 @@ fileEl.addEventListener('change', async () => {
   playerDecode.hidden = mode !== 'decode' ? true : false;
   updateCommandVar();
   try {
-    const { blocks } = await runWorker({ type: 'decode', buffer: buf }, [buf]);
+    const { kind, blocks } = await runWorker({ type: 'decode', buffer: buf }, [buf]);
     if (blocks.length > DECODE_CAP) { setStatus(`signal too large (${blocks.length} > ${DECODE_CAP})`); return; }
+    if (kind === 'image' && blocks.length === 1) {
+      // decoded an image silhouette (preamble marker) — render the full contour,
+      // not a glyph-match transcription.
+      offerImage({ coeffs: blocks[0].coeffs });
+      setStatus('image decoded · silhouette rendered');
+      showGlyphs([{ coeffs: blocks[0].coeffs, trace: null }], null,
+        { harmos: Math.min(blocks[0].coeffs.length, settings.imgHarms || 512) });
+      return;
+    }
     offerDecodeBlocks(blocks);
     setStatus(`${blocks.length} block${blocks.length === 1 ? '' : 's'} decoded`);
     showGlyphs(blocks.map(b => ({ coeffs: b.coeffs, trace: null })));
@@ -467,14 +483,14 @@ imgfile.addEventListener('change', async () => {
       mainOnly: settings.imgMain, sample: settings.imgSample, maxHarms: settings.imgHarms,
     }, [buf]);
     if (!coeffs || !coeffs.length) { setStatus('no silhouette found'); return; }
-    showGlyphs([{ coeffs, trace: null }]);
+    showGlyphs([{ coeffs, trace: null }], null, { harmos: Math.min(coeffs.length, settings.imgHarms || 512) });
     updateCommandVar();
     // weave the silhouette as a single decodable block (X/Y multiplex)
     const key = '\u0001';
     alphabet[key] = coeffs;
     try {
       const { samples } = await runWorker({ type: 'weave', text: key,
-        opts: { harmonics: Math.min(coeffs.length, 512), noise: 0, seed: 0 } });
+        opts: { harmonics: Math.min(coeffs.length, 512), noise: 0, seed: 0, preImage: true } });
       lastWavBuf = encodeWav(samples, SGFConfig.sampleRate);
       showDock();
       setStatus('image → silhouette · wav ready');

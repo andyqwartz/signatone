@@ -30,8 +30,10 @@ export function weaveBlocks(text, alphabet, opts = {}) {
   let rng = mulberry32(noiseSeed);
   const put = (fn, len) => { for (let i=0;i<len;i++){ samples[idx]=fn(idx); idx++; } };
 
-  // preamble: pure f0 phase-0 (absolute phase reference)
-  put((n)=>{ const t=n/SGFConfig.sampleRate; return Math.sin(2*Math.PI*SGFConfig.f0*t)*0.8; }, pre);
+  // preamble: pure f0 phase-0 (absolute phase reference); an image weave emits
+  // its preamble at markFreq instead so the seer can tell text apart from image.
+  const preFreq = (opts.preImage ? markFreq() : SGFConfig.f0);
+  put((n)=>{ const t=n/SGFConfig.sampleRate; return Math.sin(2*Math.PI*preFreq*t)*0.8; }, pre);
 
   for (const c of text) {
     const harm = (alphabet[c] || []).slice(0, maxHarms);   // amplitude-sorted already

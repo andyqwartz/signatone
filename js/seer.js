@@ -9,6 +9,23 @@ import { SGFConfig } from './config.js';
 
 const maxK = () => Math.floor((SGFConfig.sampleRate/2 - 2000) / SGFConfig.f0);
 function partLen() { return Math.floor(SGFConfig.blockSamples() / 2); }
+function markFreq() { return (SGFConfig.N + 3) * SGFConfig.f0; }
+
+// Classify the signal preamble: text sends a pure f0 tone, an image sends a
+// markFreq tone. Correlation over the preamble window decides the kind.
+export function detectKind(samples) {
+  const pre = SGFConfig.preSamples();
+  const n = Math.min(pre, samples.length);
+  if (n < 8) return 'text';
+  let e0 = 0, eM = 0;
+  const sr = SGFConfig.sampleRate;
+  for (let i = 0; i < n; i++) {
+    const t = i / sr;
+    e0 += samples[i] * Math.sin(2 * Math.PI * SGFConfig.f0 * t);
+    eM += samples[i] * Math.sin(2 * Math.PI * markFreq() * t);
+  }
+  return eM > e0 ? 'image' : 'text';
+}
 
 export function analyzeBlocks(samples) {
   const pre = SGFConfig.preSamples();

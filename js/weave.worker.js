@@ -3,7 +3,7 @@
 //   {type:'decode', buffer}               -> {type:'decode', blocks:[{coeffs}]}
 
 import { weaveBlocks } from './weaver.js';
-import { analyzeBlocks } from './seer.js';
+import { analyzeBlocks, detectKind } from './seer.js';
 import { decodeWavToFloat32 } from './wav.js';
 import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour } from './image.js';
 
@@ -24,8 +24,9 @@ self.onmessage = async (e) => {
       self.postMessage({ type: 'weave', samples }, [samples.buffer]);
     } else if (type === 'decode') {
       const samples = decodeWavToFloat32(e.data.buffer);
+      const kind = detectKind(samples);
       const { blocks } = analyzeBlocks(samples);
-      self.postMessage({ type: 'decode', blocks });
+      self.postMessage({ type: 'decode', kind, blocks });
     } else if (type === 'silhouette') {
       const { buffer, w, h, threshold, mode, mainOnly, maxHarms, sample } = e.data;
       const rgba = new Uint8ClampedArray(buffer);
