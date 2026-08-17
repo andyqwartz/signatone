@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, strongEdges, sobelMagnitude, gaussianBlur, edgeToPath, filterDecodable, maxKDecode } from '../js/image.js';
 import { SGFConfig } from '../js/config.js';
+import { weaveBlocks } from '../js/weaver.js';
+import { detectKind, analyzeBlocks } from '../js/seer.js';
 
 // a square block: rows 2..13, cols 2..13 on a 16x16 grid
 function squareMask() {
@@ -162,4 +164,41 @@ test('photoContour stays fast + ordered on a dense 256x256 photo', () => {
     if (Math.hypot(path[i].x - path[i-1].x, path[i].y - path[i-1].y) > 10) big++;
   }
   assert.ok(big < path.length * 0.05, `few big jumps (${big})`);
+});
+
+test('image silhouette roundtrip: contour→FFT→filter→weave→detect→decode coeffs match', () => {
+  const w = 32, h = 32;
+  const data = photoRgba(w, h);
+  const path = photoContour(data, w, h, 0.15);
+  assert.ok(path.length >= 50, 'photo contour found');
+  const N = 128;                       // power of 2
+  const rs = resample(path, N);
+  const coeffs = pathToCoeffs(rs, 64); // FFT path
+  const filtered = filterDecodable(coeffs);
+  assert.ok(filtered.length > 0, 'decodable coefficients');
+  assert.ok(filtered.every(c => Math.abs(c.k) <= maxKDecode()), 'all |k| ≤ maxK');
+
+  // weave as an image (preImage preamble → detectKind='image')
+  const key = '\u0001';
+  const alphabet = { [key]: filtered };
+  const { samples } = weaveBlocks(key, alphabet, { harmonics: filtered.length, noise: 0, seed: 0, preImage: true });
+  assert.equal(detectKind(samples), 'image', 'detected as image');
+
+  // decode
+  const { blocks } = analyzeBlocks(samples);
+  assert.equal(blocks.length, 1, 'one block decoded');
+  const decoded = blocks[0].coeffs;
+  assert.ok(decoded.length > 0, 'decoded coeffs');
+  // Compare SHAPE, not absolute scale: the weave normalises both halves to a
+  // 0.8 peak, so absolute amps differ. Normalise each set by its own max and
+  // check the top harmonics (k) and their relative strengths are preserved.
+  const norm = arr => { const m = Math.max(...arr.map(c => c.amp)); return arr.map(c => ({ ...c, amp: c.amp / m })); };
+  const a = norm(filtered), b = norm(decoded);
+  const topA = a.slice(0, 10), topB = b.slice(0, 10);
+  // every dominant k from the original appears in the decoded top set
+  for (const c of topA) {
+    assert.ok(topB.some(d => d.k === c.k), `decoded has dominant k=${c.k}`);
+  }
+  // relative amplitude of the decoded dominant ≈ 1
+  assert.ok(Math.abs(b[0].amp - 1) < 0.05, 'decoded dominant is normalised ≈1');
 });

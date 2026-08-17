@@ -13,10 +13,13 @@ export function epicyclePoint(coeffs, t) {
 }
 
 // Precompute full normalized closed trace (res+1 pts).
+// For large coeff sets (image glyphs, up to maxK bins), reduce resolution
+// adaptively so the per-frame trace math stays cheap.
 export function tracePoints(coeffs, res = 240) {
+  if (coeffs.length > 100) res = Math.max(120, Math.min(res, 240 - Math.floor(coeffs.length / 8)));
   const pts = [];
   for (let i = 0; i <= res; i++) {
-    const p = epicyclePoint(coeffs, i/res);
+    const p = epicyclePoint(coeffs, i / res);
     pts.push([p.x, p.y]);
   }
   return pts;
@@ -66,8 +69,13 @@ function drawChainT(ctx, coeffs, t, tr, color, alpha) {
   ctx.globalAlpha = alpha;
   // chain origin is the trace box centre (ox,oy == centre + 0 offset since centre at box centre)
   // canvas y is DOWN, so +vy here so the chain tip lands exactly on the trace (trace uses oy + y*s)
+  // Cap the drawn links at 128 — dominant harmonics only — so a full image glyph
+  // (up to ~430 bins) doesn't draw 430 circles per frame (lag). The swept trace
+  // below uses ALL coeffs, so the rendered image keeps full fidelity.
+  const n = Math.min(coeffs.length, 128);
   let px = ox, py = oy;
-  for (const h of coeffs) {
+  for (let i = 0; i < n; i++) {
+    const h = coeffs[i];
     const a = 2*Math.PI*h.k*t + h.phase;
     const vx = h.amp*Math.cos(a)*s, vy = h.amp*Math.sin(a)*s;
     ctx.beginPath();
