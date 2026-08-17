@@ -455,6 +455,9 @@ body.mode-encode [data-aud="dec"] { display: none; }
   /* command bar sits low, above the home indicator area */
   .command { bottom: 12px; }
 
+  /* mobile: status moves to the TOP (bottom is command/player territory) */
+  .status { top: 150px; bottom: auto; left: 14px; }
+
   /* downloads dock: horizontal bar at the bottom edge, clear of players */
   .downloads {
     top: auto;

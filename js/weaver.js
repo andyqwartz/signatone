@@ -14,6 +14,20 @@ const TARGET_PEAK = 0.8;
 
 function partLen() { return SGFConfig.blockSamples() / 2; }
 
+// Deterministic amp + phase jitter for a coefficient set. Given the same
+// (coeffs, noiseMax, seed) it always returns the same result — so the encoder
+// view (which calls this) shows EXACTLY what the weaver (which also calls this)
+// baked into the signal, and the noise slider can re-jitter live.
+export function jitterCoeffs(coeffs, noiseMax, seed) {
+  if (!noiseMax) return coeffs.map(h => ({ k: h.k, amp: h.amp, phase: h.phase }));
+  const rng = mulberry32(seed);
+  return coeffs.map((h) => {
+    const amp = h.amp * (1 + noiseMax * (rng() * 2 - 1));
+    const phase = h.phase + noiseMax * (rng() * 2 - 1) * 1.2;
+    return { k: h.k, amp, phase };
+  });
+}
+
 export function weaveBlocks(text, alphabet, opts = {}) {
   const pre = SGFConfig.preSamples();
   const plen = partLen();
@@ -44,14 +58,11 @@ export function weaveBlocks(text, alphabet, opts = {}) {
     const startIdx = idx;
     // per-letter additive dither amplitude (audible texture)
     const letterNoise = noiseMax * rng();
-    // The EXACT jittered coefficient set used for each letter, so the encoder
-    // can also display what was actually woven (noise visible in the epicycles)
-    const letterCoeffs = harm.map((h) => {
-      // amp jitter + phase jitter per harmonic (seeded, deterministic)
-      const amp = h.amp * (1 + noiseMax * (rng() * 2 - 1));
-      const phase = h.phase + noiseMax * (rng() * 2 - 1) * 1.2;
-      return { k: h.k, amp, phase };
-    });
+    // Jittered coefficient set = the EXACT same deterministic function the
+    // encoder view calls for its live display (seed derived per letter index),
+    // so what you see is what's baked into the signal.
+    const letterSeed = (noiseSeed ^ (idx * 0x9E3779B1)) >>> 0;
+    const letterCoeffs = jitterCoeffs(harm, noiseMax, letterSeed);
     noisy.push(letterCoeffs);
     // synthesize X (real part) and Y (imag) halves using the jittered sines
     const xr = new Float32Array(plen);

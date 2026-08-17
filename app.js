@@ -10,6 +10,7 @@ import { encodeWav, wavBlobUrl } from './js/wavEncoder.js';
 import * as EPI from './js/epicycles.js';
 import { computeLayout, isSealed } from './js/layout.js';
 import { normalizeText } from './js/normalize.js';
+import { jitterCoeffs } from './js/weaver.js';
 
 const alphabet = await fetch('./js/alphabet.json').then(r => r.json());
 
@@ -110,16 +111,33 @@ function showGlyphs(glyphs, onDone, opts = {}) {
   // Images carry up to ~1024 coeffs; defaulting to the text harmonics (10)
   // would render them as a coarse blob — pass the full count for precision.
   const harmos = opts.harmos != null ? opts.harmos : Math.min(settings.harmonics || 10, 64);
-  const gs = glyphs.map(g => {
-    const full = (g.coeffs || []).slice();
-    return { _fullCoefs: full, coeffs: full.slice(0, harmos), trace: normalizeTrace(EPI.tracePoints(full.slice(0, harmos), 300)) };
+  const gs = glyphs.map((g, i) => {
+    const clean = (g.coeffs || []).slice();
+    // seed per glyph: derived from settings.seed + glyph index (matches weaver)
+    const seed = (settings.seed ^ (i * 0x9E3779B1)) >>> 0;
+    return { _cleanCoefs: clean, _seed: seed, _harmos: harmos, coeffs: [], trace: [] };
   });
   const sp = Math.max(0.25, settings.speed || 1);
   animState = { glyphs: gs, start: performance.now(), onDone: onDone || null,
     drawMs: BASE_DRAW / sp, per: BASE_PER / sp, prevSettled: -1 };
+  applyVisualSettings();                 // fills coeffs+trace from clean + noise + harmonics
   recomputeLayout(); persistDirty = true;
   downloadDock.hidden = false; btnDownloadImg.hidden = false;
   loop();
+}
+
+// Rebuild every glyph's displayed coeffs + trace from its CLEAN coefficients,
+// applying the current noise (live) + harmonics slice. Shared by the noise and
+// harmonics sliders so both visibly affect the encode AND decode visualisation.
+function applyVisualSettings() {
+  if (!animState) return;
+  const harmos = Math.min(settings.harmonics || 10, 64);
+  for (const g of animState.glyphs) {
+    const jittered = jitterCoeffs(g._cleanCoefs, settings.noise || 0, g._seed);
+    g.coeffs = jittered.slice(0, harmos);
+    g.trace = normalizeTrace(EPI.tracePoints(g.coeffs, 300));
+  }
+  persistDirty = true;
 }
 function stopAnim() { if (raf) cancelAnimationFrame(raf); raf = null; animState = null; }
 function recomputeLayout() {
@@ -231,10 +249,10 @@ function downloadTxt(name, text) {
   setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
 function offerEncodeText(text) { tx = { kind: 'encode', text }; downloadDock.hidden = false; btnDownloadTxt.hidden = false; if (animState) showDock(); }
-function offerDecodeBlocks(blocks) { tx = { kind: 'decode', blocks }; downloadDock.hidden = false; btnDownloadTxt.hidden = false; if (animState) showDock(); }
+function offerDecodeBlocks(blocks) { tx = { kind: 'decode', blocks }; downloadDock.hidden = false; btnDownloadTxt.hidden = false; btnDownloadSines.hidden = false; if (animState) showDock(); }
 // a decoded image silhouette: no text transcription (the download dock's txt
-// stays hidden — the signal is the drawing).
-function offerImage() { tx = { kind: 'image' }; downloadDock.hidden = false; }
+// stays hidden — the signal is the drawing). Sines still exportable.
+function offerImage(coeffs) { tx = { kind: 'image', coeffs }; downloadDock.hidden = false; btnDownloadSines.hidden = false; }
 function transcribe() {
   if (!tx) return '';
   if (tx.kind === 'encode') return tx.text;
@@ -274,12 +292,9 @@ btnWeave.addEventListener('click', async () => {
     playerEncode.hidden = mode !== 'encode' ? true : false;
     updateCommandVar();
     showDock();
-    // display the ACTUAL woven coefficients (noise-jittered), not the clean
-    // alphabet — so the noise slider visibly affects the encode epicycles
-    const woven = (noisy && noisy.length)
-      ? noisy.map(g => ({ coeffs: g, trace: null }))
-      : chars.map(c => ({ coeffs: alphabet[c], trace: null }));
-    showGlyphs(woven, () => setStatus('weaved · ready to download'));
+    // display the CLEAN coefficients; applyVisualSettings() re-jitters them
+    // live from the noise slider so encode epicycles visibly react to noise.
+    showGlyphs(chars.map(c => ({ coeffs: alphabet[c], trace: null })), () => setStatus('weaved · ready to download'));
   } catch {
     btnWeave.disabled = false;
     setStatus('weave failed');
@@ -403,23 +418,14 @@ function applyControls() {
   els.glow.range.checked = !!settings.glow;
 }
 function applyLive() { if (animState) { recomputeLayout(); persistDirty = true; } }
-// re-apply harmonics to the current rendering so the slider is reflected live
-function applyHarmonics() {
-  if (!animState) return;
-  const harmos = Math.min(settings.harmonics || 10, 64);
-  for (const g of animState.glyphs) {
-    const full = g._fullCoefs || g.coeffs;
-    g._fullCoefs = full;
-    g.coeffs = full.slice(0, harmos);
-    g.trace = normalizeTrace(EPI.tracePoints(g.coeffs, 300));
-  }
-  persistDirty = true;
-}
+// re-apply harmonics + noise to the current rendering so BOTH sliders are
+// reflected live (harmonics slice + amp/phase jitter) — encode AND decode.
+function applyHarmonics() { applyVisualSettings(); }
 els.harmo.range.oninput = () => {
   settings.harmonics = +els.harmo.range.value; els.harmo.out.textContent = settings.harmonics;
   applyHarmonics();
 };
-els.noise.range.oninput = () => { settings.noise = +els.noise.range.value; els.noise.out.textContent = settings.noise.toFixed(2); };
+els.noise.range.oninput = () => { settings.noise = +els.noise.range.value; els.noise.out.textContent = settings.noise.toFixed(2); applyVisualSettings(); };
 els.seed.range.oninput = () => { settings.seed = +els.seed.range.value; els.seed.out.textContent = settings.seed; };
 els.speed.range.oninput = () => { settings.speed = +els.speed.range.value; els.speed.out.textContent = settings.speed.toFixed(2); };
 els.spacing.range.oninput = () => { settings.spacing = +els.spacing.range.value; els.spacing.out.textContent = settings.spacing.toFixed(2); applyLive(); };
@@ -524,7 +530,7 @@ imgfile.addEventListener('change', async () => {
 applyControls(); applyAudioControls(); applyImgControls();
 
 /* ---------------- export (PNG still / GIF animate) ---------------- */
-const btnDownloadAudio = $('btn-dl-audio'), btnDownloadImg = $('btn-dl-img'), btnDownloadTxt = $('btn-dl-txt');
+const btnDownloadAudio = $('btn-dl-audio'), btnDownloadImg = $('btn-dl-img'), btnDownloadTxt = $('btn-dl-txt'), btnDownloadSines = $('btn-dl-sines');
 const downloadDock = $('downloads'), exportPanel = $('export-panel');
 const expPng = $('exp-png'), expGif = $('exp-gif');
 let lastWavBuf = null;
@@ -540,6 +546,18 @@ btnDownloadAudio.addEventListener('click', () => {
 });
 btnDownloadImg.addEventListener('click', (e) => { e.stopPropagation(); exportPanel.hidden = !exportPanel.hidden; });
 btnDownloadTxt.addEventListener('click', () => downloadTxt('signatone_transcription.txt', transcribe()));
+// export the raw decoded sine coefficients (k, amp, phase) as a JSON dump
+btnDownloadSines.addEventListener('click', exportSines);
+function exportSines() {
+  let src = null;
+  if (tx && tx.kind === 'decode' && tx.blocks) src = tx.blocks.map(b => b.coeffs);
+  else if (tx && tx.kind === 'image' && tx.coeffs) src = [tx.coeffs];
+  else if (animState) src = animState.glyphs.map(g => g.coeffs);
+  if (!src) { setStatus('no sines to export'); return; }
+  const rows = src.map((coeffs, i) => ({ letter: i, sines: coeffs }));
+  downloadTxt('signatone_sines.json', JSON.stringify(rows, null, 2));
+  setStatus('sines exported');
+}
 expPng.addEventListener('click', exportPNG);
 expGif.addEventListener('click', exportGIF);
 function downloadBlob(name, blob) {
