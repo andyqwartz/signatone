@@ -121,7 +121,11 @@ function showGlyphs(glyphs, onDone, opts = {}) {
     const clean = (g.coeffs || []).slice();
     // seed per glyph: derived from settings.seed + glyph index (matches weaver)
     const seed = (settings.seed ^ (i * 0x9E3779B1)) >>> 0;
-    return { _cleanCoefs: clean, _seed: seed, _harmos: harmos, coeffs: [], trace: [] };
+    // Pin the harmonic count ONLY when an explicit override is passed (image
+    // renders use the full set). Text must stay live: no pinned _harmos, so
+    // applyVisualSettings keeps re-reading settings.harmonics when the slider
+    // moves — otherwise harmonic reduction appears frozen (reported bug).
+    return { _cleanCoefs: clean, _seed: seed, _harmos: opts.harmos != null ? harmos : undefined, coeffs: [], trace: [] };
   });
   const sp = Math.max(0.25, settings.speed || 1);
   animState = { glyphs: gs, start: performance.now(), onDone: onDone || null,
@@ -326,10 +330,17 @@ btnWeave.addEventListener('click', async () => {
 
 /* ---------------- STAGE 2: DECODE ---------------- */
 // (#btn-see is a <label> wrapping #file — native tap opens the picker, iOS-safe)
+// Decode runs in a Web Worker (non-blocking); we show a busy state on the
+// button + "reforming…" while the image/letters are recomputed, then render.
+let decBusy = false;
 fileEl.addEventListener('change', async () => {
   const f = fileEl.files[0];
   if (!f) return;
-  setStatus('reading signal…');
+  if (decBusy) { setStatus('already decoding…'); fileEl.value = ''; return; }
+  decBusy = true;
+  const btnSee = $('btn-see');
+  if (btnSee) btnSee.classList.add('busy');
+  setStatus('reforming signal…');
   const buf = await f.arrayBuffer();
   if (decodeUrl) URL.revokeObjectURL(decodeUrl);
   decodeUrl = URL.createObjectURL(f);
@@ -355,6 +366,10 @@ fileEl.addEventListener('change', async () => {
     showGlyphs(blocks.map(b => ({ coeffs: b.coeffs, trace: null })));
   } catch {
     setStatus('decode failed');
+  } finally {
+    decBusy = false;
+    if (btnSee) btnSee.classList.remove('busy');
+    fileEl.value = '';
   }
 });
 
@@ -567,12 +582,13 @@ imgfile.addEventListener('change', async () => {
     showGlyphs([{ coeffs, trace: null }], null, { harmos: Math.max(1, Math.min(coeffs.length, imgH)) });
     updateCommandVar();
     // weave the silhouette as a single decodable block (X/Y multiplex) — the
-    // audio path can only carry |k| ≤ maxK, so use the decodable subset.
+    // audio path can only carry |k| ≤ maxK, so use the decodable subset, and a
+    // LONGER block so every decodable harmonic resolves cleanly in phase/amp.
     const key = '\u0001';
     alphabet[key] = decodable && decodable.length ? decodable : coeffs;
     try {
       const { samples } = await runWorker({ type: 'weave', text: key,
-        opts: { harmonics: Math.min(alphabet[key].length, 512), noise: 0, seed: 0, preImage: true } });
+        opts: { harmonics: Math.min(alphabet[key].length, 512), noise: 0, seed: 0, preImage: true, blockMs: SGFConfig.IMAGE_BLOCK_MS } });
       lastWavBuf = encodeWav(samples, SGFConfig.sampleRate);
       showDock();
       setStatus(`image → silhouette · wav ready (${Math.round(performance.now() - t0)}ms)`);

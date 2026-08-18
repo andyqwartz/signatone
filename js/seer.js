@@ -8,7 +8,7 @@
 import { SGFConfig } from './config.js';
 
 const maxK = () => Math.floor((SGFConfig.sampleRate/2 - 2000) / SGFConfig.f0);
-function partLen() { return Math.floor(SGFConfig.blockSamples() / 2); }
+function partLen(blockMs = SGFConfig.blockMs) { return Math.floor(blockMs / 1000 * SGFConfig.sampleRate / 2); }
 function markFreq() { return (SGFConfig.N + 3) * SGFConfig.f0; }
 
 // Classify the signal preamble: text sends a pure f0 tone, an image sends a
@@ -27,22 +27,22 @@ export function detectKind(samples) {
   return eM > e0 ? 'image' : 'text';
 }
 
-export function analyzeBlocks(samples) {
+export function analyzeBlocks(samples, blockMs = SGFConfig.blockMs) {
   const pre = SGFConfig.preSamples();
-  const plen = partLen();
+  const plen = partLen(blockMs);
   const markLen = SGFConfig.markSamples();
   const blocks = [];
   let idx = pre;
   while (idx + plen*2 <= samples.length) {
-    blocks.push({ start: idx, coeffs: decodeBlock(samples, idx) });
+    blocks.push({ start: idx, coeffs: decodeBlock(samples, idx, blockMs) });
     idx += plen*2 + markLen;
   }
   return { blocks, preSamples: pre, blockLen: plen*2, markLen };
 }
 
 // Decode one letter (x|y halves) to signed complex bins.
-export function decodeBlock(samples, start) {
-  const plen = partLen();
+export function decodeBlock(samples, start, blockMs = SGFConfig.blockMs) {
+  const plen = partLen(blockMs);
   const sr = SGFConfig.sampleRate;
   const x = samples.subarray(start, start + plen);
   const y = samples.subarray(start + plen, start + plen*2);

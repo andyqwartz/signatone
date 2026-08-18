@@ -221,3 +221,33 @@ test('image silhouette roundtrip: contour→FFT→filter→weave→detect→deco
   // relative amplitude of the decoded dominant ≈ 1
   assert.ok(Math.abs(b[0].amp - 1) < 0.05, 'decoded dominant is normalised ≈1');
 });
+
+test('LONG-block image roundtrip: full decodable harmonics survive IMAGE_BLOCK_MS', () => {
+  const w = 48, h = 48;
+  const data = photoRgba(w, h);
+  const path = photoContour(data, w, h, { threshold: 128 });
+  assert.ok(path.length >= 40, 'contour found');
+  const N = 128;
+  const rs = resample(path, N);
+  const coeffs = pathToCoeffs(rs, 256);
+  const filtered = filterDecodable(coeffs);
+  assert.ok(filtered.length > 20, 'many decodable harmonics');
+
+  // weave at the IMAGE block length (production image path), decode with the same.
+  const key = '\u0001';
+  const alphabet = { [key]: filtered };
+  const bms = SGFConfig.IMAGE_BLOCK_MS;
+  const { samples } = weaveBlocks(key, alphabet, { harmonics: filtered.length, noise: 0, seed: 0, preImage: true, blockMs: bms });
+  assert.equal(detectKind(samples), 'image', 'detected as image at long block');
+
+  const { blocks } = analyzeBlocks(samples, bms);
+  assert.equal(blocks.length, 1, 'one long block decoded');
+  const decoded = blocks[0].coeffs;
+  assert.ok(decoded.length > 10, `decoded has >10 coeffs (got ${decoded.length})`);
+
+  // top harmonics preserved (normalised shape), same k in decoded top set
+  const norm = arr => { const m = Math.max(...arr.map(c => c.amp)); return arr.map(c => ({ ...c, amp: c.amp / m })); };
+  const a = norm(filtered), b = norm(decoded);
+  const topA = a.slice(0, 12), topB = b.slice(0, 12);
+  for (const c of topA) assert.ok(topB.some(d => d.k === c.k), `decoded long-block has dominant k=${c.k}`);
+});

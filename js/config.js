@@ -3,7 +3,8 @@ export const SGFConfig = {
   sampleRate: 48000,
   f0: 102,
   N: 128,        // full harmonic set (no truncation — kept for legibility)
-  blockMs: 120,
+  blockMs: 120,  // TEXT block duration (X|Y: half each)
+  IMAGE_BLOCK_MS: 360,  // IMAGE headed: longer X|Y so all decodable harmonics stay resolvable in phase/amp
   markMs: 60,
   preMs: 60,
   gain: 0.2,

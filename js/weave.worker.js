@@ -2,10 +2,11 @@
 //   {type:'weave', text, opts}            -> {type:'weave', samples}
 //   {type:'decode', buffer}               -> {type:'decode', blocks:[{coeffs}]}
 
-import { weaveBlocks } from './weaver.js?v=20260818b';
-import { analyzeBlocks, detectKind } from './seer.js?v=20260818b';
-import { decodeWavToFloat32 } from './wav.js?v=20260818b';
-import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js?v=20260818b';
+import { SGFConfig } from './config.js?v=20260818c';
+import { weaveBlocks } from './weaver.js?v=20260818c';
+import { analyzeBlocks, detectKind } from './seer.js?v=20260818c';
+import { decodeWavToFloat32 } from './wav.js?v=20260818c';
+import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js?v=20260818c';
 
 let alphabet = null;
 function nextPow2(n) { let p = 1; while (p < n) p <<= 1; return p; }
@@ -28,8 +29,11 @@ self.onmessage = async (e) => {
     } else if (type === 'decode') {
       const samples = decodeWavToFloat32(e.data.buffer);
       const kind = detectKind(samples);
-      const { blocks } = analyzeBlocks(samples);
-      self.postMessage({ type: 'decode', kind, blocks });
+      // Image weaves use a LONGER block so all decodable harmonics resolve in
+      // phase/amp; the seer must decode with the SAME blockMs. Text stays 120ms.
+      const blockMs = kind === 'image' ? SGFConfig.IMAGE_BLOCK_MS : SGFConfig.blockMs;
+      const { blocks } = analyzeBlocks(samples, blockMs);
+      self.postMessage({ type: 'decode', kind, blocks, blockMs });
     } else if (type === 'silhouette') {
       const { buffer, w, h, threshold, mode, mainOnly, maxHarms, sample } = e.data;
       const rgba = new Uint8ClampedArray(buffer);

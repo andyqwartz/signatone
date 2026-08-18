@@ -12,7 +12,7 @@ import { SGFConfig } from './config.js';
 const markFreq = () => (SGFConfig.N + 3) * SGFConfig.f0;
 const TARGET_PEAK = 0.8;
 
-function partLen() { return SGFConfig.blockSamples() / 2; }
+function partLen(blockMs = SGFConfig.blockMs) { return Math.floor(blockMs / 1000 * SGFConfig.sampleRate / 2); }
 
 // Deterministic amp + phase jitter for a coefficient set. Given the same
 // (coeffs, noiseMax, seed) it always returns the same result — so the encoder
@@ -30,7 +30,8 @@ export function jitterCoeffs(coeffs, noiseMax, seed) {
 
 export function weaveBlocks(text, alphabet, opts = {}) {
   const pre = SGFConfig.preSamples();
-  const plen = partLen();
+  const blockMs = opts.blockMs || SGFConfig.blockMs;   // image uses longer block
+  const plen = partLen(blockMs);
   const markLen = SGFConfig.markSamples();
   // options: harmonics (count of bins to emit), noise (0..1 -> per-letter random amplitude ratio)
   const maxHarms = opts.harmonics || alphabet[text[0]||'A']?.length || 64;
