@@ -85,6 +85,9 @@
     <div class="grp"><label>source <output id="o-img-mode">auto</output></label>
       <select id="set-img-mode"><option value="auto" selected>auto</option><option value="alpha">alpha</option><option value="luma">luma</option></select></div>
     <div class="grp grp-chk"><label class="chk"><input type="checkbox" id="set-img-main" checked> main curve only</label></div>
+    <h2 style="margin-top:14px;color:var(--dim)">decoded render</h2>
+    <div class="grp"><label>decoded harmonics <output id="o-img-dech">215</output></label><input type="range" id="set-img-dech" min="2" max="215" step="1" value="215"></div>
+    <div class="grp grp-chk"><label class="chk"><input type="checkbox" id="set-img-chain" checked> show chain</label></div>
   </aside>
 
   <!-- downloads: dedicated dock, separate from input + primary actions -->
@@ -151,6 +154,6 @@
   <div class="seal" id="seal" hidden>◈ signal captured</div>
 
   <script src="js/vendor/gif.js"></script>
-  <script type="module" src="app.js?v=20260818e"></script>
+  <script type="module" src="app.js?v=20260818f"></script>
 </body>
 </html>

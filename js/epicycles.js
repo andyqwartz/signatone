@@ -43,7 +43,7 @@ export function drawTraceFrac(ctx, trace, cx, cy, box, color, frac=1, lw=0.5) {
 
 // Full faithful frame: rotating chain (live) + swept trace, both aligned.
 //   t: revolution phase [0,1); frac: 0..1 how much of the letter is drawn.
-//   opts: { lineWidth, glow (bool), glowColor, glowBlur }
+//   opts: { lineWidth, glow (bool), glowColor, glowBlur, showChain (bool) }
 export function drawEpicycleFrame(ctx, coeffs, trace, t, cx, cy, box, color, frac=1, opts={}) {
   // one shared transform so the chain tip lands exactly on the trace
   const tr = transformOf(trace, cx, cy, box);
@@ -53,7 +53,7 @@ export function drawEpicycleFrame(ctx, coeffs, trace, t, cx, cy, box, color, fra
     ctx.shadowBlur = opts.glowBlur;
   }
   drawTraceFracT(ctx, trace, tr, color, frac, lw);
-  drawChainT(ctx, coeffs, t, tr, color, 0.4, lw);
+  if (opts.showChain !== false) drawChainT(ctx, coeffs, t, tr, color, 0.25, lw);
   if (opts.glow) { ctx.shadowBlur = 0; }
 }
 

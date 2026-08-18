@@ -57,7 +57,8 @@ function loadSettings() {
   const def = { harmonics: 10, noise: 0, seed: 12345, speed: 1, spacing: 1.7, single: 14,
     accent: '#7e61d4', theme: 'night', stroke: 0.6, glowAmt: 10,
     audioGain: 1, audioTempo: 1, audioVol: 1, audioTempo2: 1,
-    imgThreshold: 128, imgSample: 1024, imgHarms: 1024, imgMode: 'auto', imgMain: true };
+    imgThreshold: 128, imgSample: 1024, imgHarms: 1024, imgMode: 'auto', imgMain: true,
+      imgDecHarms: 215, imgChain: true };
   try { return Object.assign(def, JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}); }
   catch { return def; }
 }
@@ -125,7 +126,10 @@ function showGlyphs(glyphs, onDone, opts = {}) {
     // renders use the full set). Text must stay live: no pinned _harmos, so
     // applyVisualSettings keeps re-reading settings.harmonics when the slider
     // moves — otherwise harmonic reduction appears frozen (reported bug).
-    return { _cleanCoefs: clean, _seed: seed, _harmos: opts.harmos != null ? harmos : undefined, coeffs: [], trace: [] };
+    // _isDecodeImg marks a decoded silhouette so the image "decoded harmonics"
+    // slider can re-contour it live (applyImageRender).
+    return { _cleanCoefs: clean, _seed: seed, _harmos: opts.harmos != null ? harmos : undefined,
+      _isDecodeImg: !!g._isDecodeImg, coeffs: [], trace: [] };
   });
   const sp = Math.max(0.25, settings.speed || 1);
   animState = { glyphs: gs, start: performance.now(), onDone: onDone || null,
@@ -199,7 +203,8 @@ function drawLive(g, L, t, frac, color, tctx = ctx) {
   const glow = (settings.glowAmt || 0) > 0;
   if (glow) { tctx.shadowColor = 'rgba(126,97,212,0.35)'; tctx.shadowBlur = settings.glowAmt; }
   EPI.drawEpicycleFrame(tctx, g.coeffs, g.trace, t, L.cx, L.cy, L.box, color, frac,
-    { lineWidth: settings.stroke || 0.6, glow, glowColor: settings.accent, glowBlur: settings.glowAmt });
+    { lineWidth: settings.stroke || 0.6, glow, glowColor: settings.accent, glowBlur: settings.glowAmt,
+      showChain: g._isDecodeImg ? (settings.imgChain !== false) : true });
   tctx.restore();
 }
 canvas.addEventListener('mousemove', (e) => {
@@ -275,7 +280,7 @@ function downloadTxt(name, text) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
-function offerEncodeText(text) { tx = { kind: 'encode', text }; downloadDock.hidden = false; btnDownloadTxt.hidden = false; if (animState) showDock(); }
+function offerEncodeText(text) { tx = { kind: 'encode', text }; downloadDock.hidden = false; btnDownloadTxt.hidden = false; btnDownloadSines.hidden = false; if (animState) showDock(); }
 function offerDecodeBlocks(blocks) { tx = { kind: 'decode', blocks }; downloadDock.hidden = false; btnDownloadTxt.hidden = false; btnDownloadSines.hidden = false; if (animState) showDock(); }
 // a decoded image silhouette: no text transcription (the download dock's txt
 // stays hidden — the signal is the drawing). Sines still exportable.
@@ -354,11 +359,13 @@ fileEl.addEventListener('change', async () => {
     if (blocks.length > DECODE_CAP) { setStatus(`signal too large (${blocks.length} > ${DECODE_CAP})`); return; }
     if (kind === 'image' && blocks.length === 1) {
       // decoded an image silhouette (preamble marker) — render the full contour,
-      // not a glyph-match transcription.
+      // not a glyph-match transcription. Decoded-harmonics + show-chain come
+      // from the image panel; the slider re-contours it live via applyImageRender.
       offerImage({ coeffs: blocks[0].coeffs });
       setStatus('image decoded · silhouette rendered');
-      showGlyphs([{ coeffs: blocks[0].coeffs, trace: null }], null,
-        { harmos: Math.min(blocks[0].coeffs.length, settings.imgHarms || 512) });
+      const decCoefs = blocks[0].coeffs;
+      showGlyphs([{ coeffs: decCoefs, trace: null, _isDecodeImg: true }], null,
+        { harmos: Math.max(1, Math.min(settings.imgDecHarms || 215, decCoefs.length)) });
       return;
     }
     offerDecodeBlocks(blocks);
@@ -544,6 +551,8 @@ const iEls = {
   harms: { range: $('set-img-harms'), out: $('o-img-harms') },
   mode: { range: $('set-img-mode'), out: $('o-img-mode') },
   main: { range: $('set-img-main'), out: null },
+  dech: { range: $('set-img-dech'), out: $('o-img-dech') },
+  chain: { range: $('set-img-chain'), out: null },
 };
 function applyImgControls() {
   iEls.threshold.out.textContent = settings.imgThreshold; iEls.threshold.range.value = settings.imgThreshold;
@@ -551,6 +560,8 @@ function applyImgControls() {
   iEls.harms.out.textContent = settings.imgHarms; iEls.harms.range.value = settings.imgHarms;
   iEls.mode.out.textContent = settings.imgMode; iEls.mode.range.value = settings.imgMode;
   iEls.main.range.checked = !!settings.imgMain;
+  iEls.dech.out.textContent = settings.imgDecHarms; iEls.dech.range.value = settings.imgDecHarms;
+  iEls.chain.range.checked = !!settings.imgChain;
 }
 iEls.threshold.range.oninput = () => { settings.imgThreshold = +iEls.threshold.range.value; iEls.threshold.out.textContent = settings.imgThreshold; };
 iEls.sample.range.onchange = () => { settings.imgSample = +iEls.sample.range.value; iEls.sample.out.textContent = settings.imgSample; saveSettings(); };
@@ -559,6 +570,18 @@ iEls.mode.range.onchange = () => { settings.imgMode = iEls.mode.range.value; iEl
 iEls.main.range.onchange = () => { settings.imgMain = iEls.main.range.checked; saveSettings(); };
 iEls.threshold.range.onchange = saveSettings;
 iEls.harms.range.onchange = saveSettings;
+// decoded render: live re-contour the currently decoded image silhouette
+function applyImageRender() {
+  if (!animState || !animState.glyphs.some(g => g._isDecodeImg)) return;
+  for (const g of animState.glyphs) {
+    if (!g._isDecodeImg) continue;
+    g._harmos = Math.max(1, Math.min(settings.imgDecHarms || 215, g._cleanCoefs.length));
+  }
+  applyVisualSettings();
+}
+iEls.dech.range.oninput = () => { settings.imgDecHarms = +iEls.dech.range.value; iEls.dech.out.textContent = settings.imgDecHarms; applyImageRender(); };
+iEls.chain.range.onchange = () => { settings.imgChain = iEls.chain.range.checked; saveSettings(); persistDirty = true; };
+iEls.dech.range.onchange = saveSettings;
 btnImgOpt.addEventListener('click', (e) => { e.stopPropagation(); openPanel(imgPanel); });
 
 // image -> silhouette -> epicycles (render) + single-block WAV (decodable)
