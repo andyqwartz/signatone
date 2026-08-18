@@ -469,9 +469,21 @@ titleTrig.addEventListener('click', () => {
   const now = Date.now();
   if (now - lastTap > 500) titleClicks = 0;
   titleClicks++; lastTap = now;
-  if (titleClicks >= 3) { panel.hidden = !panel.hidden; titleClicks = 0; if (!panel.hidden) applyControls(); }
+  if (titleClicks >= 3) { openPanel(panel); titleClicks = 0; if (!panel.hidden) applyControls(); }
 });
-btnSettings.addEventListener('click', (e) => { e.stopPropagation(); panel.hidden = !panel.hidden; if (!panel.hidden) applyControls(); saveSettings(); });
+// Accordion: exactly one settings panel open at a time. Opening one closes the
+// other three (signal / audio / image / export), so toggles never stack.
+const PANELS = () => [panel, audioPanel, imgPanel, exportPanel];
+function openPanel(want) {
+  for (const p of PANELS()) if (p !== want) p.hidden = true;
+  want.hidden = !want.hidden;
+  if (!want.hidden) {
+    if (want === panel) applyControls();
+    else if (want === audioPanel) applyAudioControls();
+    else if (want === imgPanel) applyImgControls();
+  }
+}
+btnSettings.addEventListener('click', (e) => { e.stopPropagation(); openPanel(panel); saveSettings(); });
 
 /* ---------------- audio config panel (contextual) ---------------- */
 const audioPanel = $('audio-options'), btnAudio = $('btn-audio');
@@ -490,7 +502,7 @@ aEls.tempo.range.oninput = () => { settings.audioTempo = +aEls.tempo.range.value
 aEls.vol.range.oninput = () => { settings.audioVol = +aEls.vol.range.value; aEls.vol.out.textContent = settings.audioVol.toFixed(2); audioDecode.volume = settings.audioVol; };
 aEls.tempo2.range.oninput = () => { settings.audioTempo2 = +aEls.tempo2.range.value; aEls.tempo2.out.textContent = settings.audioTempo2.toFixed(2); audioDecode.playbackRate = settings.audioTempo2; };
 for (const k of ['gain','tempo','vol','tempo2']) aEls[k].range.onchange = saveSettings;
-btnAudio.addEventListener('click', (e) => { e.stopPropagation(); audioPanel.hidden = !audioPanel.hidden; if (!audioPanel.hidden) applyAudioControls(); });
+btnAudio.addEventListener('click', (e) => { e.stopPropagation(); openPanel(audioPanel); });
 
 /* ---------------- image config (silhouette) ---------------- */
 const imgPanel = $('img-options'), btnImgOpt = $('btn-img-opt');
@@ -516,7 +528,7 @@ iEls.mode.range.onchange = () => { settings.imgMode = iEls.mode.range.value; iEl
 iEls.main.range.onchange = () => { settings.imgMain = iEls.main.range.checked; saveSettings(); };
 iEls.threshold.range.onchange = saveSettings;
 iEls.harms.range.onchange = saveSettings;
-btnImgOpt.addEventListener('click', (e) => { e.stopPropagation(); imgPanel.hidden = !imgPanel.hidden; if (!imgPanel.hidden) applyImgControls(); });
+btnImgOpt.addEventListener('click', (e) => { e.stopPropagation(); openPanel(imgPanel); });
 
 // image -> silhouette -> epicycles (render) + single-block WAV (decodable)
 // (the α Image control is a <label> wrapping #imgfile — native tap opens the picker,
@@ -580,7 +592,7 @@ function showDock() {
 btnDownloadAudio.addEventListener('click', () => {
   if (lastWavBuf) downloadBlob(exportName('signal', 'wav'), new Blob([lastWavBuf], { type: 'audio/wav' }));
 });
-btnDownloadImg.addEventListener('click', (e) => { e.stopPropagation(); exportPanel.hidden = !exportPanel.hidden; });
+btnDownloadImg.addEventListener('click', (e) => { e.stopPropagation(); openPanel(exportPanel); });
 btnDownloadTxt.addEventListener('click', () => downloadTxt(exportName('transcription', 'txt'), transcribe()));
 // export the raw decoded sine coefficients (k, amp, phase) as a JSON dump
 btnDownloadSines.addEventListener('click', exportSines);
