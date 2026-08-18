@@ -458,8 +458,24 @@ body.mode-encode [data-aud="dec"] { display: none; }
   /* command bar sits low, above the home indicator area */
   .command { bottom: 12px; }
 
-  /* mobile: status moves to the TOP (bottom is command/player territory) */
-  .status { top: 150px; bottom: auto; left: 14px; }
+  /* mobile: status sits centered just under the mode switch, as a subtle pill
+     (the bottom is command/player/download territory) */
+  .status {
+    top: 104px;
+    bottom: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 86vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 5px 14px;
+    border-radius: 999px;
+    background: var(--glass-strong);
+    border: var(--hair) solid var(--hair);
+    backdrop-filter: blur(6px);
+    text-align: center;
+  }
 
   /* downloads dock: horizontal bar at the bottom edge, clear of players */
   .downloads {

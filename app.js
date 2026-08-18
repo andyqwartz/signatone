@@ -242,7 +242,7 @@ function loop() {
   raf = requestAnimationFrame(loop);
 }
 
-function setStatus(s) { statusEl.textContent = `— ${s}`; }
+function setStatus(s) { statusEl.textContent = s || ''; }
 
 /* ---------------- quiet confirmation ---------------- */
 let sealTimer = null;
