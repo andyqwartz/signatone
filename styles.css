@@ -427,6 +427,18 @@ body.mode-encode [data-aud="dec"] { display: none; }
   padding: 0 4px;
 }
 
+/* ===================== light theme polish =====================
+   Warm bone ground + dark text; soften the heavy night shadows and keep
+   the violet accent; hairline borders become dark-friendly. Applied via
+   body[data-theme="light"] (set by app.js applyTheme). */
+body[data-theme="light"] .command { box-shadow: 0 16px 44px rgba(43, 38, 32, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.6); }
+body[data-theme="light"] .player { box-shadow: 0 12px 30px rgba(43, 38, 32, 0.12); }
+body[data-theme="light"] .hidden-panel,
+body[data-theme="light"] .seal { box-shadow: 0 10px 34px rgba(43, 38, 32, 0.16); }
+body[data-theme="light"] .mode-btn.is-active { color: var(--ground); }
+body[data-theme="light"] .hud { color: var(--os); }
+body[data-theme="light"] textarea::placeholder { color: var(--dim); }
+
 /* ===================== mobile — placed LAST so these win the cascade ===================== */
 @media (max-width: 720px) {
   /* command console: compact column so the viz stays visible above it */

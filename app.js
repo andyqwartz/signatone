@@ -183,6 +183,7 @@ function applyTheme() {
   const light = settings.theme === 'light';
   r.setProperty('--glass', light ? 'rgba(252, 250, 244, 0.78)' : 'rgba(14, 11, 8, 0.72)');
   r.setProperty('--glass-strong', light ? 'rgba(252, 250, 244, 0.92)' : 'rgba(10, 8, 6, 0.85)');
+  document.body.dataset.theme = settings.theme || 'night';
 }
 function traceSpan(tr) { let mx=1e9,Mx=-1e9,my=1e9,My=-1e9; for (const [x,y] of tr){ if(x<mx)mx=x; if(x>Mx)Mx=x; if(y<my)my=y; if(y>My)My=y; } return Math.max(Mx-mx,My-my); }
 function strokeGlyph(tctx, g, L, color, alpha) {
@@ -473,7 +474,7 @@ els.speed.range.oninput = () => { settings.speed = +els.speed.range.value; els.s
 els.spacing.range.oninput = () => { settings.spacing = +els.spacing.range.value; els.spacing.out.textContent = settings.spacing.toFixed(2); applyLive(); };
 els.single.range.oninput = () => { settings.single = +els.single.range.value; els.single.out.textContent = settings.single; applyLive(); };
 els.accent.range.oninput = () => { settings.accent = els.accent.range.value; els.accent.out.textContent = settings.accent; applyLive(); };
-els.theme.range.onchange = () => { settings.theme = els.theme.range.value; els.theme.out.textContent = settings.theme; applyTheme(); applyLive(); saveSettings(); };
+els.theme.range.onchange = () => { settings.theme = els.theme.range.value; els.theme.out.textContent = settings.theme; applyTheme(); syncThemeIcon(); applyLive(); saveSettings(); };
 els.stroke.range.oninput = () => { settings.stroke = +els.stroke.range.value; els.stroke.out.textContent = settings.stroke.toFixed(2); applyVisualSettings(); };
 els.glowamt.range.oninput = () => { settings.glowAmt = +els.glowamt.range.value; els.glowamt.out.textContent = settings.glowAmt; persistDirty = true; };
 for (const k of ['harmo','noise','seed','speed','spacing','single','accent','stroke','glowamt']) els[k].range.onchange = saveSettings;
@@ -498,6 +499,23 @@ function openPanel(want) {
   }
 }
 btnSettings.addEventListener('click', (e) => { e.stopPropagation(); openPanel(panel); saveSettings(); });
+
+/* ---------------- theme toggle (visible button) ---------------- */
+const btnTheme = $('btn-theme'), themeIco = $('theme-ico');
+function syncThemeIcon() {
+  if (!themeIco) return;
+  // sun (light) when in night, moon when in light — shows what you'll switch TO
+  themeIco.innerHTML = settings.theme === 'light'
+    ? '<path d="M13.6 9.4A5.4 5.4 0 0 1 6.6 2.4 5.6 5.6 0 1 0 13.6 9.4z" fill="currentColor" fill-opacity="0.2" stroke-linecap="round"/>'
+    : '<circle cx="8" cy="8" r="3.4"/><path d="M8 1.4v2 M8 12.6v2 M1.4 8h2 M12.6 8h2 M3.2 3.2l1.4 1.4 M11.4 11.4l1.4 1.4 M12.8 3.2l-1.4 1.4 M4.6 11.4l-1.4 1.4" stroke-linecap="round"/>';
+}
+btnTheme.addEventListener('click', (e) => {
+  e.stopPropagation();
+  settings.theme = settings.theme === 'light' ? 'night' : 'light';
+  els.theme.range.value = settings.theme; els.theme.out.textContent = settings.theme;
+  applyTheme(); if (animState) { persistDirty = true; }
+  syncThemeIcon(); saveSettings();
+});
 
 /* ---------------- audio config panel (contextual) ---------------- */
 const audioPanel = $('audio-options'), btnAudio = $('btn-audio');
@@ -605,6 +623,7 @@ imgfile.addEventListener('change', async () => {
 
 applyControls(); applyAudioControls(); applyImgControls();
 applyTheme();
+syncThemeIcon();
 
 /* ---------------- export (PNG still / GIF animate) ---------------- */
 const btnDownloadAudio = $('btn-dl-audio'), btnDownloadImg = $('btn-dl-img'), btnDownloadTxt = $('btn-dl-txt'), btnDownloadSines = $('btn-dl-sines');
