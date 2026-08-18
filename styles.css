@@ -8,6 +8,8 @@
   --ember: #7e61d4;              /* trace accent */
   --ember-soft: rgba(126, 97, 212, 0.35);
   --hair: rgba(234, 226, 212, 0.16);
+  --glass: rgba(14, 11, 8, 0.72);      /* translucent panels */
+  --glass-strong: rgba(10, 8, 6, 0.85);
   --disp: "Space Grotesk", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
 }
@@ -26,8 +28,9 @@ html, body {
   font-family: var(--disp);
   letter-spacing: 0.02em;
   background-image:
-    radial-gradient(circle at 50% 38%, rgba(126, 97, 212, 0.06), rgba(10, 8, 6, 0) 62%),
-    radial-gradient(circle at 84% 70%, rgba(126, 97, 212, 0.03), rgba(10, 8, 6, 0) 55%);
+    radial-gradient(circle at 50% 38%, rgba(126, 97, 212, 0.06), var(--bg) 62%),
+    radial-gradient(circle at 84% 70%, rgba(126, 97, 212, 0.03), var(--bg) 55%);
+  transition: background 0.3s, color 0.3s;
 }
 
 #stage {
@@ -80,7 +83,7 @@ html, body {
   align-items: stretch;
   gap: 0;
   z-index: 6;
-  background: rgba(14, 11, 8, 0.72);
+  background: var(--glass);
   backdrop-filter: blur(14px);
   border: var(--hair) solid var(--hair);
   border-radius: 16px;
@@ -190,7 +193,7 @@ textarea::-webkit-scrollbar-thumb { background: var(--dim2); border-radius: 3px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: rgba(14, 11, 8, 0.72);
+  background: var(--glass);
   backdrop-filter: blur(10px);
   border: var(--hair) solid var(--hair);
   border-radius: 12px;
@@ -222,7 +225,7 @@ textarea::-webkit-scrollbar-thumb { background: var(--dim2); border-radius: 3px;
   width: 224px;
   max-height: calc(100vh - 100px);
   overflow-y: auto;
-  background: rgba(10, 8, 6, 0.85);
+  background: var(--glass-strong);
   backdrop-filter: blur(8px);
   border: var(--hair) solid var(--hair);
   padding: 14px 16px;
@@ -289,7 +292,7 @@ textarea::-webkit-scrollbar-thumb { background: var(--dim2); border-radius: 3px;
   padding: 3px;
   border: var(--hair) solid var(--hair);
   border-radius: 999px;
-  background: rgba(10, 8, 6, 0.55);
+  background: var(--glass-strong);
   backdrop-filter: blur(6px);
 }
 .mode-btn {
@@ -358,7 +361,7 @@ body.mode-encode [data-aud="dec"] { display: none; }
   padding: 9px 14px;
   border: var(--hair) solid var(--hair);
   border-radius: 999px;
-  background: rgba(14, 11, 8, 0.78);
+  background: var(--glass);
   backdrop-filter: blur(10px);
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4);
 }
@@ -400,7 +403,7 @@ body.mode-encode [data-aud="dec"] { display: none; }
   padding: 8px;
   border: var(--hair) solid var(--hair);
   border-radius: 12px;
-  background: rgba(14, 11, 8, 0.82);
+  background: var(--glass);
   backdrop-filter: blur(8px);
 }
 .export-panel .action.ghost { white-space: nowrap; }

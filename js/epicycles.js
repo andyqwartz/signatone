@@ -37,22 +37,29 @@ function transformOf(trace, cx, cy, box) {
 }
 
 // Draw the swept trace (message) up to fraction frac, hair-thin.
-export function drawTraceFrac(ctx, trace, cx, cy, box, color, frac=1) {
-  drawTraceFracT(ctx, trace, transformOf(trace, cx, cy, box), color, frac);
+export function drawTraceFrac(ctx, trace, cx, cy, box, color, frac=1, lw=0.5) {
+  drawTraceFracT(ctx, trace, transformOf(trace, cx, cy, box), color, frac, lw);
 }
 
 // Full faithful frame: rotating chain (live) + swept trace, both aligned.
 //   t: revolution phase [0,1); frac: 0..1 how much of the letter is drawn.
-export function drawEpicycleFrame(ctx, coeffs, trace, t, cx, cy, box, color, frac=1) {
+//   opts: { lineWidth, glow (bool), glowColor, glowBlur }
+export function drawEpicycleFrame(ctx, coeffs, trace, t, cx, cy, box, color, frac=1, opts={}) {
   // one shared transform so the chain tip lands exactly on the trace
   const tr = transformOf(trace, cx, cy, box);
-  drawTraceFracT(ctx, trace, tr, color, frac);
-  drawChainT(ctx, coeffs, t, tr, color, 0.4);
+  const lw = opts.lineWidth || 0.5;
+  if (opts.glow && opts.glowBlur) {
+    ctx.shadowColor = opts.glowColor || color;
+    ctx.shadowBlur = opts.glowBlur;
+  }
+  drawTraceFracT(ctx, trace, tr, color, frac, lw);
+  drawChainT(ctx, coeffs, t, tr, color, 0.4, lw);
+  if (opts.glow) { ctx.shadowBlur = 0; }
 }
 
-function drawTraceFracT(ctx, trace, tr, color, frac=1) {
+function drawTraceFracT(ctx, trace, tr, color, frac=1, lw=0.5) {
   const { s, ox, oy } = tr;
-  ctx.strokeStyle = color; ctx.lineWidth = 0.5; ctx.globalAlpha = 1;
+  ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.globalAlpha = 1;
   const n = Math.max(2, Math.round(trace.length * Math.min(1, frac)));
   ctx.beginPath();
   for (let i=0;i<n;i++){
@@ -63,9 +70,9 @@ function drawTraceFracT(ctx, trace, tr, color, frac=1) {
   ctx.stroke();
 }
 
-function drawChainT(ctx, coeffs, t, tr, color, alpha) {
+function drawChainT(ctx, coeffs, t, tr, color, alpha, lw=0.5) {
   const { s, ox, oy } = tr;
-  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 0.5;
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = lw;
   ctx.globalAlpha = alpha;
   // chain origin is the trace box centre (ox,oy == centre + 0 offset since centre at box centre)
   // canvas y is DOWN, so +vy here so the chain tip lands exactly on the trace (trace uses oy + y*s)

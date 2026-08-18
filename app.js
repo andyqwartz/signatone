@@ -20,6 +20,12 @@ const BASE_PER = 1300;
 const WEAVE_CAP = 4000;       // chars
 const DECODE_CAP = 4000;      // blocks
 
+// Day/night themes — accent (#7e61d4) is shared; only the ground/bone shift.
+const THEMES = {
+  night: { os: '#EAE2D4', bg: '#0A0806', ground: '#0E0B08', hair: 'rgba(234,226,212,0.16)' },
+  light: { os: '#2B2620', bg: '#F6F3EC', ground: '#FCFAF4', hair: 'rgba(43,38,32,0.20)' },
+};
+
 const $ = (id) => document.getElementById(id);
 const canvas = $('stage'), ctx = canvas.getContext('2d');
 const persistCanvas = document.createElement('canvas'), pctx = persistCanvas.getContext('2d');
@@ -50,7 +56,8 @@ const settings = loadSettings();
 
 function loadSettings() {
   const def = { harmonics: 10, noise: 0, seed: 12345, speed: 1, spacing: 1.7, single: 14,
-    accent: '#7e61d4', glow: true, audioGain: 1, audioTempo: 1, audioVol: 1, audioTempo2: 1,
+    accent: '#7e61d4', theme: 'night', stroke: 0.6, glowAmt: 10,
+    audioGain: 1, audioTempo: 1, audioVol: 1, audioTempo2: 1,
     imgThreshold: 128, imgSample: 1024, imgHarms: 1024, imgMode: 'auto', imgMain: false };
   try { return Object.assign(def, JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}); }
   catch { return def; }
@@ -156,14 +163,27 @@ function repaintPersist(st, settled) {
   for (let i = 0; i < settled; i++) {
     const g = st.glyphs[i], L = st.layout[i];
     if (!g || !L || !g.coeffs.length) continue;
-    strokeGlyph(pctx, g, L, OS, 0.5);
+    strokeGlyph(pctx, g, L, themeOS(), 0.5);
   }
+}
+function themeOS() { return (THEMES[settings.theme] || THEMES.night).os; }
+function applyTheme() {
+  const t = THEMES[settings.theme] || THEMES.night;
+  const r = document.documentElement.style;
+  r.setProperty('--bg', t.bg); r.setProperty('--ground', t.ground);
+  r.setProperty('--os', t.os); r.setProperty('--hair', t.hair);
+  r.setProperty('--dim', t.os + '66');        // 40% bone
+  r.setProperty('--dim2', t.os + '29');       // 16% bone
+  // translucent panels follow the theme ground
+  const light = settings.theme === 'light';
+  r.setProperty('--glass', light ? 'rgba(252, 250, 244, 0.78)' : 'rgba(14, 11, 8, 0.72)');
+  r.setProperty('--glass-strong', light ? 'rgba(252, 250, 244, 0.92)' : 'rgba(10, 8, 6, 0.85)');
 }
 function traceSpan(tr) { let mx=1e9,Mx=-1e9,my=1e9,My=-1e9; for (const [x,y] of tr){ if(x<mx)mx=x; if(x>Mx)Mx=x; if(y<my)my=y; if(y>My)My=y; } return Math.max(Mx-mx,My-my); }
 function strokeGlyph(tctx, g, L, color, alpha) {
   const tr = g.trace; if (!tr || !tr.length) return;
   const s = L.box * 0.85 / (traceSpan(tr) || 1);
-  tctx.save(); tctx.lineWidth = 0.6; tctx.strokeStyle = color; tctx.globalAlpha = alpha;
+  tctx.save(); tctx.lineWidth = settings.stroke || 0.6; tctx.strokeStyle = color; tctx.globalAlpha = alpha;
   tctx.beginPath();
   for (let j = 0; j < tr.length; j++) { const dx = L.cx + tr[j][0] * s, dy = L.cy + tr[j][1] * s; j ? tctx.lineTo(dx, dy) : tctx.moveTo(dx, dy); }
   tctx.closePath(); tctx.stroke(); tctx.restore();
@@ -171,8 +191,10 @@ function strokeGlyph(tctx, g, L, color, alpha) {
 function drawLive(g, L, t, frac, color, tctx = ctx) {
   if (!g.coeffs.length) return;
   tctx.save();
-  if (settings.glow) { tctx.shadowColor = 'rgba(126,97,212,0.35)'; tctx.shadowBlur = 10; }
-  EPI.drawEpicycleFrame(tctx, g.coeffs, g.trace, t, L.cx, L.cy, L.box, color, frac);
+  const glow = (settings.glowAmt || 0) > 0;
+  if (glow) { tctx.shadowColor = 'rgba(126,97,212,0.35)'; tctx.shadowBlur = settings.glowAmt; }
+  EPI.drawEpicycleFrame(tctx, g.coeffs, g.trace, t, L.cx, L.cy, L.box, color, frac,
+    { lineWidth: settings.stroke || 0.6, glow, glowColor: settings.accent, glowBlur: settings.glowAmt });
   tctx.restore();
 }
 canvas.addEventListener('mousemove', (e) => {
@@ -405,7 +427,9 @@ const els = {
   harmo: { range: $('set-harmo'), out: $('o-harmo') }, noise: { range: $('set-noise'), out: $('o-noise') },
   seed: { range: $('set-seed'), out: $('o-seed') }, speed: { range: $('set-speed'), out: $('o-speed') },
   spacing: { range: $('set-spacing'), out: $('o-spacing') }, single: { range: $('set-single'), out: $('o-single') },
-  accent: { range: $('set-accent'), out: $('o-accent') }, glow: { range: $('set-glow'), out: null },
+  accent: { range: $('set-accent'), out: $('o-accent') },
+  theme: { range: $('set-theme'), out: $('o-theme') }, stroke: { range: $('set-stroke'), out: $('o-stroke') },
+  glowamt: { range: $('set-glowamt'), out: $('o-glowamt') },
 };
 function applyControls() {
   els.harmo.out.textContent = settings.harmonics; els.harmo.range.value = settings.harmonics;
@@ -415,7 +439,9 @@ function applyControls() {
   els.spacing.out.textContent = (+settings.spacing).toFixed(2); els.spacing.range.value = settings.spacing;
   els.single.out.textContent = settings.single; els.single.range.value = settings.single;
   els.accent.out.textContent = settings.accent; els.accent.range.value = settings.accent;
-  els.glow.range.checked = !!settings.glow;
+  els.theme.out.textContent = settings.theme; els.theme.range.value = settings.theme;
+  els.stroke.out.textContent = (+settings.stroke).toFixed(2); els.stroke.range.value = settings.stroke;
+  els.glowamt.out.textContent = settings.glowAmt; els.glowamt.range.value = settings.glowAmt;
 }
 function applyLive() { if (animState) { recomputeLayout(); persistDirty = true; } }
 // re-apply harmonics + noise to the current rendering so BOTH sliders are
@@ -431,8 +457,10 @@ els.speed.range.oninput = () => { settings.speed = +els.speed.range.value; els.s
 els.spacing.range.oninput = () => { settings.spacing = +els.spacing.range.value; els.spacing.out.textContent = settings.spacing.toFixed(2); applyLive(); };
 els.single.range.oninput = () => { settings.single = +els.single.range.value; els.single.out.textContent = settings.single; applyLive(); };
 els.accent.range.oninput = () => { settings.accent = els.accent.range.value; els.accent.out.textContent = settings.accent; applyLive(); };
-els.glow.range.onchange = () => { settings.glow = els.glow.range.checked; saveSettings(); };
-for (const k of ['harmo','noise','seed','speed','spacing','single','accent']) els[k].range.onchange = saveSettings;
+els.theme.range.onchange = () => { settings.theme = els.theme.range.value; els.theme.out.textContent = settings.theme; applyTheme(); applyLive(); saveSettings(); };
+els.stroke.range.oninput = () => { settings.stroke = +els.stroke.range.value; els.stroke.out.textContent = settings.stroke.toFixed(2); applyVisualSettings(); };
+els.glowamt.range.oninput = () => { settings.glowAmt = +els.glowamt.range.value; els.glowamt.out.textContent = settings.glowAmt; persistDirty = true; };
+for (const k of ['harmo','noise','seed','speed','spacing','single','accent','stroke','glowamt']) els[k].range.onchange = saveSettings;
 
 let titleClicks = 0, lastTap = 0;
 titleTrig.addEventListener('click', () => {
@@ -528,6 +556,7 @@ imgfile.addEventListener('change', async () => {
 });
 
 applyControls(); applyAudioControls(); applyImgControls();
+applyTheme();
 
 /* ---------------- export (PNG still / GIF animate) ---------------- */
 const btnDownloadAudio = $('btn-dl-audio'), btnDownloadImg = $('btn-dl-img'), btnDownloadTxt = $('btn-dl-txt'), btnDownloadSines = $('btn-dl-sines');
