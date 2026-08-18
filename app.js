@@ -602,34 +602,44 @@ function exportPNG() {
 }
 function exportGIF() {
   if (!animState) { setStatus('nothing to export'); return; }
-  if (!window.GIF) { setStatus('gif encoder unavailable'); return; }
+  if (typeof window.GIF === 'undefined') { setStatus('gif encoder unavailable'); return; }
   exportPanel.hidden = true;
   const st = animState, gs = st.glyphs, layout = st.layout || [];
   const n = gs.length, per = st.per, drawMs = st.drawMs;
   const T = (n - 1) * per + drawMs;
   const fps = 24;
   // Cap frames adaptively: a decoded image glyph carries hundreds of harmonics,
-  // and drawing that per frame × 180 frames is both slow and memory-heavy in the
-  // GIF worker. Large coeff sets get fewer frames so export completes reliably.
+  // and drawing per-frame is slow + memory-heavy. Large coeff sets get fewer
+  // frames so export completes reliably.
   const maxCoeffs = Math.max(...gs.map(g => (g.coeffs ? g.coeffs.length : 0)));
   const frameCap = maxCoeffs > 128 ? 60 : 180;
   const frames = Math.max(8, Math.min(frameCap, Math.round((T / 1000) * fps)));
   setStatus('rendering gif…');
-  const gif = new window.GIF({ workers: 2, quality: 10, workerScript: 'js/vendor/gif.worker.js' });
+  // Run gif.js in the MAIN thread (`workers: 0`): no workerScript URI to
+  // resolve, so export works regardless of how the app is served. The past
+  // `workerScript: 'js/vendor/gif.worker.js'` path broke under some bases.
+  const gif = new window.GIF({ workers: 0, quality: 10 });
   const c = document.createElement('canvas');
   c.width = canvas.width; c.height = canvas.height;
   const x = c.getContext('2d');
   x.setTransform(dpr, 0, 0, dpr, 0, 0);
   const W = innerWidth, H = innerHeight;
+  const bg = themeOS() === '#EAE2D4' ? '#0A0806' : '#F6F3EC';
   for (let f = 0; f < frames; f++) {
     const e = T * (f / Math.max(1, frames - 1));
     x.clearRect(0, 0, W, H);
-    x.fillStyle = '#0A0806'; x.fillRect(0, 0, W, H);
-    for (let i = 0; i < n; i++) if (e >= i * per + drawMs && gs[i].coeffs.length) strokeGlyph(x, gs[i], layout[i], OS, 0.9);
+    x.fillStyle = bg; x.fillRect(0, 0, W, H);
+    for (let i = 0; i < n; i++) if (e >= i * per + drawMs && gs[i].coeffs.length) strokeGlyph(x, gs[i], layout[i], themeOS(), 0.9);
     for (let i = 0; i < n; i++) if (e >= i * per && e < i * per + drawMs) drawLive(gs[i], layout[i], (e - i * per) / drawMs % 1, Math.min(1, (e - i * per) / drawMs), settings.accent, x);
     gif.addFrame(c, { delay: Math.round(1000 / fps), copy: true });
   }
-  gif.on('finished', (blob) => { downloadBlob('signatone_epicycles.gif', blob); setStatus('gif exported'); });
+  let done = false;
+  const fin = (blob, msg) => { if (done) return; done = true; if (blob) downloadBlob('signatone_epicycles.gif', blob); setStatus(msg); };
+  gif.on('finished', (blob) => fin(blob, 'gif exported'));
+  gif.on('abort', () => fin(null, 'gif aborted'));
+  gif.on('error', () => fin(null, 'gif error'));
+  // Safety net: never leave the status stuck "rendering".
+  setTimeout(() => fin(null, 'gif timed out'), 60000);
   gif.render();
 }
 // restore the last-used mode (encode/decode) across reloads
