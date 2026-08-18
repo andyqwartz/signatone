@@ -14,7 +14,6 @@ import { jitterCoeffs } from './js/weaver.js';
 
 const alphabet = await fetch('./js/alphabet.json').then(r => r.json());
 
-const OS = '#EAE2D4';
 const BASE_DRAW = 1250;
 const BASE_PER = 1300;
 const WEAVE_CAP = 4000;       // chars
