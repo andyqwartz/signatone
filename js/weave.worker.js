@@ -84,8 +84,9 @@ self.onmessage = async (e) => {
       if (!path.length) throw new Error('empty or unreadable image');
       path = resample(path, nextPow2(Math.min(sample || 1024, 2048)));
       // FULL harmonic set for the RENDER (many harmonics → true contour, the
-      // proven code's default). Keep the whole set so the contour is crisp.
-      const coeffs = pathToCoeffs(path, maxHarms || 2048);
+      // proven code's default: all N harmonics, no truncation). Keep the whole
+      // set so the contour is crisp.
+      const coeffs = pathToCoeffs(path, path.length);
       // Decodable subset (|k| ≤ maxK) is what the audio can actually carry;
       // the render above uses the full set regardless.
       const decodable = filterDecodable(coeffs);

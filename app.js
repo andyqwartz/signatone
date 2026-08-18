@@ -57,7 +57,7 @@ function loadSettings() {
   const def = { harmonics: 10, noise: 0, seed: 12345, speed: 1, spacing: 1.7, single: 14,
     accent: '#7e61d4', theme: 'night', stroke: 0.6, glowAmt: 10,
     audioGain: 1, audioTempo: 1, audioVol: 1, audioTempo2: 1,
-    imgThreshold: 128, imgSample: 1024, imgHarms: 1024, imgMode: 'auto', imgMain: true,
+    imgThreshold: 128, imgSample: 2048, imgHarms: 2048, imgMode: 'auto', imgMain: false,
       imgDecHarms: 215, imgChain: true };
   try { return Object.assign(def, JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}); }
   catch { return def; }
@@ -624,7 +624,7 @@ imgfile.addEventListener('change', async () => {
     // some webp/svg files; fall back to an <img> element + canvas.
     const bmp = await decodeImageBitmap(f);
     const c = document.createElement('canvas');
-    c.width = Math.min(bmp.width, 640); c.height = Math.min(bmp.height, 640);
+    c.width = Math.min(bmp.width, 1024); c.height = Math.min(bmp.height, 1024);
     const cx = c.getContext('2d', { willReadFrequently: true });
     cx.drawImage(bmp, 0, 0, c.width, c.height);
     const id = cx.getImageData(0, 0, c.width, c.height);
@@ -635,11 +635,11 @@ imgfile.addEventListener('change', async () => {
       mainOnly: settings.imgMain, sample: settings.imgSample, maxHarms: settings.imgHarms,
     }, [buf]);
     if (!coeffs || !coeffs.length) { setStatus('no silhouette found'); return; }
-    // Render the FULL harmonic set so the contour is crisp (many harmonics =
-    // true outline, the proven code's default). The weave below carries only
-    // the decodable subset (|k| ≤ maxK) the audio can actually transport.
-    const imgH = settings.imgHarms || 1024;
-    showGlyphs([{ coeffs, trace: null }], null, { harmos: Math.max(1, Math.min(coeffs.length, imgH)) });
+    // Render the FULL harmonic set — faithful to the proven `fourier_visualization.py`
+    // which keeps ALL N harmonics (no truncation) so the contour is a true outline.
+    // The weave below carries only the decodable subset (|k| ≤ maxK) the audio can
+    // transport; the display is full-fidelity.
+    showGlyphs([{ coeffs, trace: null }], null, { harmos: coeffs.length });
     updateCommandVar();
     // weave the silhouette as a single decodable block (X/Y multiplex) — the
     // audio path can only carry |k| ≤ maxK, so use the decodable subset, and a
