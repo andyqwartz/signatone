@@ -2,11 +2,11 @@
 //   {type:'weave', text, opts}            -> {type:'weave', samples}
 //   {type:'decode', buffer}               -> {type:'decode', blocks:[{coeffs}]}
 
-import { SGFConfig } from './config.js?v=20260818g';
-import { weaveBlocks } from './weaver.js?v=20260818g';
-import { analyzeBlocks, detectKind } from './seer.js?v=20260818g';
-import { decodeWavToFloat32 } from './wav.js?v=20260818g';
-import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js?v=20260818g';
+import { SGFConfig } from './config.js?v=20260818h';
+import { weaveBlocks } from './weaver.js?v=20260818h';
+import { analyzeBlocks, detectKind } from './seer.js?v=20260818h';
+import { decodeWavToFloat32 } from './wav.js?v=20260818h';
+import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js?v=20260818h';
 
 let alphabet = null;
 function nextPow2(n) { let p = 1; while (p < n) p <<= 1; return p; }
