@@ -2,10 +2,10 @@
 //   {type:'weave', text, opts}            -> {type:'weave', samples}
 //   {type:'decode', buffer}               -> {type:'decode', blocks:[{coeffs}]}
 
-import { weaveBlocks } from './weaver.js?v=20260817r';
-import { analyzeBlocks, detectKind } from './seer.js?v=20260817r';
-import { decodeWavToFloat32 } from './wav.js?v=20260817r';
-import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js?v=20260817r';
+import { weaveBlocks } from './weaver.js?v=20260818a';
+import { analyzeBlocks, detectKind } from './seer.js?v=20260818a';
+import { decodeWavToFloat32 } from './wav.js?v=20260818a';
+import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js?v=20260818a';
 
 let alphabet = null;
 function nextPow2(n) { let p = 1; while (p < n) p <<= 1; return p; }
@@ -33,27 +33,29 @@ self.onmessage = async (e) => {
     } else if (type === 'silhouette') {
       const { buffer, w, h, threshold, mode, mainOnly, maxHarms, sample } = e.data;
       const rgba = new Uint8ClampedArray(buffer);
-      let coeffs = null;
-      // 1) edge-based path (proven Canny-like + nearest-neighbour) works for
+      let path = null;
+      // 1) edge-based path (proven Canny + nearest-neighbour) works for
       //    real photos; fall back to the alpha/luma region mask for clean silhouettes.
-      let path = photoContour(rgba, w, h, 0.15);
+      const edge = photoContour(rgba, w, h, 0.16);
       const EDGE_MIN = 64;
-      if (path.length >= EDGE_MIN) {
-        path = resample(path, nextPow2(Math.min(sample || 1024, 2048)));
+      if (edge.length >= EDGE_MIN) {
+        path = edge;
       } else {
         const { mask } = maskFromImageData(rgba, w, h, threshold == null ? 128 : threshold, mode || 'auto');
         let loops = traceContours(mask, w, h);
         if (!loops.length) throw new Error('no silhouette found');
         if (mainOnly) loops = [loops.sort((a, b) => b.length - a.length)[0]];
         path = composePath(loops);
-        path = resample(path, nextPow2(Math.min(sample || 1024, 2048)));
       }
-      coeffs = pathToCoeffs(path, maxHarms || 1024);
-      // clamp to the decoder's readable bin range (|k| ≤ maxK) so every emitted
-      // bin is actually recoverable — otherwise high spatial frequencies are
-      // woven but lost on decode → degraded image render.
-      coeffs = filterDecodable(coeffs);
-      self.postMessage({ type: 'silhouette', coeffs });
+      // Resample to a power-of-2 for the radix-2 FFT.
+      path = resample(path, nextPow2(Math.min(sample || 1024, 2048)));
+      // FULL harmonic set for the RENDER (many harmonics → true contour, the
+      // proven code's default). Keep the whole set so the contour is crisp.
+      const coeffs = pathToCoeffs(path, maxHarms || 2048);
+      // Decodable subset (|k| ≤ maxK) is what the audio can actually carry;
+      // the render above uses the full set regardless.
+      const decodable = filterDecodable(coeffs);
+      self.postMessage({ type: 'silhouette', coeffs, decodable });
     } else {
       throw new Error('unknown worker op: ' + type);
     }

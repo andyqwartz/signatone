@@ -176,7 +176,7 @@ export function pathToCoeffs(path, maxHarms = 1024) {
 /* ------------------------------------------------------------------ */
 
 // Luma plane from RGBA.
-function lumaPlane(data, w, h) {
+export function lumaPlane(data, w, h) {
   const out = new Float32Array(w * h);
   for (let i = 0; i < w * h; i++) out[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
   return out;
@@ -208,6 +208,64 @@ export function sobelMagnitude(plane, w, h) {
     g[y * w + x] = m; if (m > maxg) maxg = m;
   }
   return { g, maxg };
+}
+
+// Canny edge detection — faithful port of the proven `fourier_visualization.py`
+// pipeline (Gaussian blur → Sobel magnitude+angle → non-max suppression →
+// double threshold + hysteresis). The old path used a SINGLE Sobel ratio
+// (`strongEdges`) which caught interior texture → noisy, unreadable contours.
+// Canny yields clean 1-px connected boundaries that order into a true outline.
+export function cannyEdges(plane, w, h, tLow = 0.06, tHigh = 0.16) {
+  const b = gaussianBlur(plane, w, h);
+  // Sobel gradient magnitude + direction (rounded to 4 compass angles)
+  const mag = new Float32Array(w * h);
+  const dir = new Int8Array(w * h);
+  let maxg = 0;
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const p = (yy, xx) => b[yy * w + xx];
+    const gx = -p(y-1,x-1) - 2*p(y,x-1) - p(y+1,x-1) + p(y-1,x+1) + 2*p(y,x+1) + p(y+1,x+1);
+    const gy = -p(y-1,x-1) - 2*p(y-1,x) - p(y-1,x+1) + p(y+1,x-1) + 2*p(y+1,x) + p(y+1,x+1);
+    const m = Math.sqrt(gx*gx + gy*gy); mag[y*w+x] = m; if (m > maxg) maxg = m;
+    // angle in 4 bins: 0°(E-W), 45(SE-NW), 90(N-S), 135(SW-NE). Angle = atan2(gy,gx).
+    const ang = Math.atan2(gy, gx) * 180 / Math.PI;           // [-180,180]
+    const a = ((ang < -157.5 || ang >= 157.5) || (ang >= -22.5 && ang < 22.5)) ? 0
+            : ((ang >= 22.5 && ang < 67.5) || (ang < -112.5 && ang >= -157.5)) ? 45
+            : ((ang >= 67.5 && ang < 112.5) || (ang < -67.5 && ang >= -112.5)) ? 90
+            : 135;
+    dir[y*w+x] = a;
+  }
+  const norm = maxg || 1;
+  const lo = tLow * norm, hi = tHigh * norm;
+  const nms = new Uint8Array(w * h);   // 0=suppressed 1=strong 2=weak
+  const inb = (y, x) => y >= 0 && y < h && x >= 0 && x < w;
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const m = mag[y*w+x];
+    if (m < lo) continue;
+    let n1 = 0, n2 = 0;
+    switch (dir[y*w+x]) {
+      case 0:  n1 = mag[y*w+x-1] > m ? 1 : 0; n2 = mag[y*w+x+1] > m ? 1 : 0; break;
+      case 45: n1 = mag[(y-1)*w+x+1] > m ? 1 : 0; n2 = mag[(y+1)*w+x-1] > m ? 1 : 0; break;
+      case 90: n1 = mag[(y-1)*w+x] > m ? 1 : 0; n2 = mag[(y+1)*w+x] > m ? 1 : 0; break;
+      case 135:n1 = mag[(y-1)*w+x-1] > m ? 1 : 0; n2 = mag[(y+1)*w+x+1] > m ? 1 : 0; break;
+    }
+    if (n1 || n2) continue;                       // not a local max → suppressed
+    nms[y*w+x] = m >= hi ? 1 : 2;                 // strong vs weak
+  }
+  // Hysteresis: keep weak pixels 8-connected to a strong pixel (flood fill).
+  const out = new Uint8Array(w * h);
+  const stack = [];
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) if (nms[y*w+x] === 1) { out[y*w+x] = 1; stack.push(y*w+x); }
+  while (stack.length) {
+    const i = stack.pop(); const y = Math.floor(i / w), x = i % w;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue; const yy = y + dy, xx = x + dx;
+      if (!inb(yy, xx)) continue; const j = yy*w+xx;
+      if (nms[j] === 2 && !out[j]) { out[j] = 1; stack.push(j); }
+    }
+  }
+  const pts = [];
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) if (out[y*w+x]) pts.push({ x, y });
+  return pts;
 }
 
 // Edge pixel extraction: magnitude above `ratio` of the global max (Canny high-threshold step).
@@ -277,11 +335,18 @@ export function edgeToPath(pts) {
 }
 
 // Full photo silhouette: RGBA -> centred ordered edge polyline.
-// Decimates dense edge sets (~2000 pts cap) so ordering stays fast.
-export function photoContour(data, w, h, edgeRatio = 0.15) {
-  const plane = gaussianBlur(lumaPlane(data, w, h), w, h);
-  const mag = sobelMagnitude(plane, w, h);
-  let pts = strongEdges(mag, w, h, edgeRatio);
+// Uses Canny (hysteresis) for clean 1-px boundaries — the proven
+// Fourier-Epicycles approach — with a fallback to the Sobel-ratio path if the
+// Canny threshold leaves too few points. Decimates dense edge sets (~2000 pts
+// cap) so ordering stays fast.
+export function photoContour(data, w, h, edgeRatio = 0.16) {
+  const plane = lumaPlane(data, w, h);
+  let pts = cannyEdges(plane, w, h, edgeRatio * 0.38, edgeRatio);
+  // Too few with high hysteresis → relax thresholds toward the old single-ratio path.
+  if (pts.length < 30) {
+    const mag = sobelMagnitude(plane, w, h);
+    pts = strongEdges(mag, w, h, edgeRatio);
+  }
   if (pts.length > 2000) {                    // cap the ordering cost
     const step = Math.ceil(pts.length / 2000);
     pts = pts.filter((_, i) => i % step === 0);

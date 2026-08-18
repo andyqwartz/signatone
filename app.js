@@ -138,8 +138,10 @@ function showGlyphs(glyphs, onDone, opts = {}) {
 // harmonics sliders so both visibly affect the encode AND decode visualisation.
 function applyVisualSettings() {
   if (!animState) return;
-  const harmos = Math.min(settings.harmonics || 10, 64);
   for (const g of animState.glyphs) {
+    // honor a per-glyph harmonic override (image renders use the FULL set);
+    // default to the harmon/64 text cap otherwise.
+    const harmos = g._harmos != null ? g._harmos : Math.min(settings.harmonics || 10, 64);
     const jittered = jitterCoeffs(g._cleanCoefs, settings.noise || 0, g._seed);
     g.coeffs = jittered.slice(0, harmos);
     g.trace = normalizeTrace(EPI.tracePoints(g.coeffs, 300));
@@ -531,20 +533,25 @@ imgfile.addEventListener('change', async () => {
     cx.drawImage(bmp, 0, 0, c.width, c.height);
     const id = cx.getImageData(0, 0, c.width, c.height);
     const buf = id.data.buffer.slice(0);
-    const { coeffs } = await runWorker({
+    const { coeffs, decodable } = await runWorker({
       type: 'silhouette', buffer: buf, w: c.width, h: c.height,
       threshold: settings.imgThreshold, mode: settings.imgMode,
       mainOnly: settings.imgMain, sample: settings.imgSample, maxHarms: settings.imgHarms,
     }, [buf]);
     if (!coeffs || !coeffs.length) { setStatus('no silhouette found'); return; }
-    showGlyphs([{ coeffs, trace: null }], null, { harmos: Math.min(coeffs.length, settings.imgHarms || 512) });
+    // Render the FULL harmonic set so the contour is crisp (many harmonics =
+    // true outline, the proven code's default). The weave below carries only
+    // the decodable subset (|k| ≤ maxK) the audio can actually transport.
+    const imgH = settings.imgHarms || 1024;
+    showGlyphs([{ coeffs, trace: null }], null, { harmos: Math.max(1, Math.min(coeffs.length, imgH)) });
     updateCommandVar();
-    // weave the silhouette as a single decodable block (X/Y multiplex)
+    // weave the silhouette as a single decodable block (X/Y multiplex) — the
+    // audio path can only carry |k| ≤ maxK, so use the decodable subset.
     const key = '\u0001';
-    alphabet[key] = coeffs;
+    alphabet[key] = decodable && decodable.length ? decodable : coeffs;
     try {
       const { samples } = await runWorker({ type: 'weave', text: key,
-        opts: { harmonics: Math.min(coeffs.length, 512), noise: 0, seed: 0, preImage: true } });
+        opts: { harmonics: Math.min(alphabet[key].length, 512), noise: 0, seed: 0, preImage: true } });
       lastWavBuf = encodeWav(samples, SGFConfig.sampleRate);
       showDock();
       setStatus('image → silhouette · wav ready');

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, strongEdges, sobelMagnitude, gaussianBlur, edgeToPath, filterDecodable, maxKDecode } from '../js/image.js';
+import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, strongEdges, sobelMagnitude, gaussianBlur, edgeToPath, filterDecodable, maxKDecode, cannyEdges, lumaPlane } from '../js/image.js';
 import { SGFConfig } from '../js/config.js';
 import { weaveBlocks } from '../js/weaver.js';
 import { detectKind, analyzeBlocks } from '../js/seer.js';
@@ -112,7 +112,7 @@ function photoRgba(w = 64, h = 64) {
 test('photoContour finds a large ordered edge contour on a photo-like image', () => {
   const w = 64, h = 64;
   const data = photoRgba(w, h);
-  const path = photoContour(data, w, h, 0.15);
+  const path = photoContour(data, w, h, 0.16);
   assert.ok(path.length >= 100, `edge path has >=100 pts (got ${path.length})`);
   // ordered: consecutive jumps stay small (nearest-neighbour, closed loop)
   const n = path.length;
@@ -123,6 +123,25 @@ test('photoContour finds a large ordered edge contour on a photo-like image', ()
   // centred: centroid ~0
   let sx = 0, sy = 0; for (const p of path) { sx += p.x; sy += p.y; }
   assert.ok(Math.abs(sx / n) < 4 && Math.abs(sy / n) < 4, 'centred');
+});
+
+test('cannyEdges hugs a clean high-contrast boundary (silhouette case)', () => {
+  // A clean light disc on a dark field (no interior texture): Canny must
+  // concentrate on the rim — the case the old single-threshold path handled
+  // worst for real photos with soft gradients.
+  const w = 64, h = 64, cx = w / 2, cy = h / 2, rim = w * 0.3;
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const d = Math.hypot(x - cx, y - cy);
+    const v = d < rim ? 235 : 20;                       // crisp binary silhouette
+    const i = (y * w + x) * 4; data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+  }
+  const plane = lumaPlane(data, w, h);
+  const pts = cannyEdges(plane, w, h, 0.06, 0.16);
+  assert.ok(pts.length >= 40, `canny has >=40 edge pts (got ${pts.length})`);
+  let near = 0;
+  for (const p of pts) if (Math.abs(Math.hypot(p.x - cx, p.y - cy) - rim) < 6) near++;
+  assert.ok(near / pts.length > 0.7, `>70% of canny pts hug the rim (got ${(near / pts.length).toFixed(2)})`);
 });
 
 test('maxKDecode matches the seer decode range formula', () => {
