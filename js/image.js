@@ -182,6 +182,14 @@ export function lumaPlane(data, w, h) {
   return out;
 }
 
+// Mean plane from RGBA — exact parity with the proven `fourier_visualization.py`
+// which uses `np.average(img, axis=-1)` = arithmetic mean of the RGB channels.
+export function meanPlane(data, w, h) {
+  const out = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) out[i] = (data[i * 4] + data[i * 4 + 1] + data[i * 4 + 2]) / 3;
+  return out;
+}
+
 // 3x3 separable-ish Gaussian blur (uniform kernel weights 1/2/1) on the luma plane.
 export function gaussianBlur(plane, w, h) {
   const out = new Float32Array(w * h);
@@ -343,25 +351,25 @@ export function edgeToPath(pts, mainOnly = false) {
 }
 
 // Full photo silhouette: RGBA -> centred ordered edge polyline.
-// Uses Canny (hysteresis, ABSOLUTE thresholds = cv2.Canny parity) for clean
-// 1-px boundaries — the proven Fourier-Epicycles approach — with a fallback to
-// the Sobel-ratio path if the Canny threshold leaves too few points.
+// Faithful port of `fourier_visualization.py`: mean-plane grayscale, Gaussian
+// blur, Canny with ABSOLUTE thresholds, nearest-neighbour ordering. We ADAPT
+// the threshold downward (halving) until we get a solid contour — the proven
+// file just runs cleanly to a full outline, it never gives up / falls to mask.
 //   mainOnly=true (default): keep the longest cycle → one true outline.
-// Decimates dense edge sets (~2000 pts cap) so ordering stays fast.
+// Accepts a min point count (default 200) so dense edge sets stay ordered well.
 export function photoContour(data, w, h, opts = {}) {
-  const threshold = opts.threshold ?? 128;
-  // cv2.Canny(100, 200) uses a 1:2 low:high ratio; drive the high threshold
-  // from the user slider (default 128 → low 64 / high 128, close to proven).
-  const high = Math.max(40, Math.min(255, threshold));
-  const low = Math.max(20, Math.floor(high / 2));
+  let high = Math.max(40, Math.min(255, opts.threshold ?? 200));
   const mainOnly = opts.mainOnly ?? true;
-  const plane = lumaPlane(data, w, h);
-  let pts = cannyEdges(plane, w, h, low, high);
-  // Too few with high hysteresis → relax toward a lower absolute threshold.
-  if (pts.length < 30 && high > 60) {
-    pts = cannyEdges(plane, w, h, Math.floor(high / 2), high);
+  const minPts = opts.minPts ?? 200;
+  const plane = meanPlane(data, w, h);
+  let pts = [];
+  for (let guard = 0; guard < 5; guard++) {
+    const low = Math.max(20, Math.floor(high / 2));
+    pts = cannyEdges(plane, w, h, low, high);
+    if (pts.length >= minPts) break;
+    high = Math.floor(high / 2);          // relax toward more edges (proven just runs)
   }
-  if (pts.length > 2000) {                    // cap the ordering cost
+  if (pts.length > 2000) {                // cap the ordering cost
     const step = Math.ceil(pts.length / 2000);
     pts = pts.filter((_, i) => i % step === 0);
   }

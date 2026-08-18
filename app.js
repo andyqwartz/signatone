@@ -132,7 +132,6 @@ function showGlyphs(glyphs, onDone, opts = {}) {
     drawMs: BASE_DRAW / sp, per: BASE_PER / sp, prevSettled: -1 };
   applyVisualSettings();                 // fills coeffs+trace from clean + noise + harmonics
   recomputeLayout(); persistDirty = true;
-  downloadDock.hidden = false; btnDownloadImg.hidden = false;
   loop();
 }
 

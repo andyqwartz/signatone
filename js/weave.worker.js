@@ -2,11 +2,11 @@
 //   {type:'weave', text, opts}            -> {type:'weave', samples}
 //   {type:'decode', buffer}               -> {type:'decode', blocks:[{coeffs}]}
 
-import { SGFConfig } from './config.js?v=20260818d';
-import { weaveBlocks } from './weaver.js?v=20260818d';
-import { analyzeBlocks, detectKind } from './seer.js?v=20260818d';
-import { decodeWavToFloat32 } from './wav.js?v=20260818d';
-import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js?v=20260818d';
+import { SGFConfig } from './config.js?v=20260818e';
+import { weaveBlocks } from './weaver.js?v=20260818e';
+import { analyzeBlocks, detectKind } from './seer.js?v=20260818e';
+import { decodeWavToFloat32 } from './wav.js?v=20260818e';
+import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js?v=20260818e';
 
 let alphabet = null;
 function nextPow2(n) { let p = 1; while (p < n) p <<= 1; return p; }
@@ -37,19 +37,34 @@ self.onmessage = async (e) => {
     } else if (type === 'silhouette') {
       const { buffer, w, h, threshold, mode, mainOnly, maxHarms, sample } = e.data;
       const rgba = new Uint8ClampedArray(buffer);
+      const th = threshold == null ? 128 : threshold;
+      const mo = mode || 'auto';
       let path = null;
-      // 1) edge-based path (proven Canny + nearest-neighbour) works for
-      //    real photos; fall back to the alpha/luma region mask for clean silhouettes.
-      const edge = photoContour(rgba, w, h, { threshold: threshold == null ? 128 : threshold, mainOnly: !!mainOnly });
-      const EDGE_MIN = 64;
-      if (edge.length >= EDGE_MIN) {
-        path = edge;
-      } else {
-        const { mask } = maskFromImageData(rgba, w, h, threshold == null ? 128 : threshold, mode || 'auto');
+      // 1) Explicit source (alpha / luma) → the region-mask path, which is the
+      //    only one that reads alpha. Canny (luma edge) would ignore the user's
+      //    chosen source, so we go straight to the mask.
+      // 2) 'auto' → for real photos try Canny edge path first (proven
+      //    Fourier-Epicycles), and fall back to the auto alpha/luma mask for
+      //    clean silhouettes / transparent PNGs.
+      if (mo !== 'auto') {
+        // Explicit alpha/luma: region-mask path (the only one that reads alpha).
+        const { mask } = maskFromImageData(rgba, w, h, th, mo);
         let loops = traceContours(mask, w, h);
         if (!loops.length) throw new Error('no silhouette found');
         if (mainOnly) loops = [loops.sort((a, b) => b.length - a.length)[0]];
         path = composePath(loops);
+      } else {
+        // auto → proven Canny edge path (adaptive thresholds, never swallows a
+        // real photo); fall back to the auto mask ONLY if the edge path yields
+        // nothing usable (e.g. a clean transparent logo).
+        path = photoContour(rgba, w, h, { threshold: th, mainOnly: !!mainOnly });
+        if (!path.length) {
+          const { mask } = maskFromImageData(rgba, w, h, th, 'auto');
+          let loops = traceContours(mask, w, h);
+          if (!loops.length) throw new Error('no silhouette found');
+          if (mainOnly) loops = [loops.sort((a, b) => b.length - a.length)[0]];
+          path = composePath(loops);
+        }
       }
       // Resample to a power-of-2 for the radix-2 FFT.
       path = resample(path, nextPow2(Math.min(sample || 1024, 2048)));
