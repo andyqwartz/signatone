@@ -578,10 +578,10 @@ function showDock() {
   btnDownloadImg.hidden = !animState;
 }
 btnDownloadAudio.addEventListener('click', () => {
-  if (lastWavBuf) downloadBlob('signatone_signal.wav', new Blob([lastWavBuf], { type: 'audio/wav' }));
+  if (lastWavBuf) downloadBlob(exportName('signal', 'wav'), new Blob([lastWavBuf], { type: 'audio/wav' }));
 });
 btnDownloadImg.addEventListener('click', (e) => { e.stopPropagation(); exportPanel.hidden = !exportPanel.hidden; });
-btnDownloadTxt.addEventListener('click', () => downloadTxt('signatone_transcription.txt', transcribe()));
+btnDownloadTxt.addEventListener('click', () => downloadTxt(exportName('transcription', 'txt'), transcribe()));
 // export the raw decoded sine coefficients (k, amp, phase) as a JSON dump
 btnDownloadSines.addEventListener('click', exportSines);
 function exportSines() {
@@ -591,7 +591,7 @@ function exportSines() {
   else if (animState) src = animState.glyphs.map(g => g.coeffs);
   if (!src) { setStatus('no sines to export'); return; }
   const rows = src.map((coeffs, i) => ({ letter: i, sines: coeffs }));
-  downloadTxt('signatone_sines.json', JSON.stringify(rows, null, 2));
+  downloadTxt(exportName('sines', 'json'), JSON.stringify(rows, null, 2));
   setStatus('sines exported');
 }
 expPng.addEventListener('click', exportPNG);
@@ -602,10 +602,19 @@ function downloadBlob(name, blob) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
+// Timestamped, coherent export names — every download is unique and tells the
+// mode + kind, so re-exports never collide and names stay consistent.
+function fileStamp() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
+}
+function exportName(kind, ext) {
+  return `signatone-${mode}-${kind}-${fileStamp()}.${ext}`;
+}
 function exportPNG() {
   if (!animState) { setStatus('nothing to export'); return; }
   exportPanel.hidden = true;
-  canvas.toBlob(b => { downloadBlob('signatone_trace.png', b); setStatus('png exported'); }, 'image/png');
+  canvas.toBlob(b => { downloadBlob(exportName('still', 'png'), b); setStatus('png exported'); }, 'image/png');
 }
 function exportGIF() {
   if (!animState) { setStatus('nothing to export'); return; }
@@ -641,7 +650,7 @@ function exportGIF() {
     gif.addFrame(c, { delay: Math.round(1000 / fps), copy: true });
   }
   let done = false;
-  const fin = (blob, msg) => { if (done) return; done = true; if (blob) downloadBlob('signatone_epicycles.gif', blob); setStatus(msg); };
+  const fin = (blob, msg) => { if (done) return; done = true; if (blob) downloadBlob(exportName('epicycles', 'gif'), blob); setStatus(msg); };
   gif.on('finished', (blob) => fin(blob, 'gif exported'));
   gif.on('abort', () => fin(null, 'gif aborted'));
   gif.on('error', () => fin(null, 'gif error'));
