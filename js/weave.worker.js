@@ -2,17 +2,35 @@
 //   {type:'weave', text, opts}            -> {type:'weave', samples}
 //   {type:'decode', buffer}               -> {type:'decode', blocks:[{coeffs}]}
 
-import { SGFConfig } from './config.js?v=20260818f';
-import { weaveBlocks } from './weaver.js?v=20260818f';
-import { analyzeBlocks, detectKind } from './seer.js?v=20260818f';
-import { decodeWavToFloat32 } from './wav.js?v=20260818f';
-import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js?v=20260818f';
+import { SGFConfig } from './config.js?v=20260818g';
+import { weaveBlocks } from './weaver.js?v=20260818g';
+import { analyzeBlocks, detectKind } from './seer.js?v=20260818g';
+import { decodeWavToFloat32 } from './wav.js?v=20260818g';
+import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js?v=20260818g';
 
 let alphabet = null;
 function nextPow2(n) { let p = 1; while (p < n) p <<= 1; return p; }
 async function getAlphabet() {
   if (!alphabet) alphabet = await fetch('./alphabet.json').then(r => r.json());
   return alphabet;
+}
+
+// Robust silhouette from a binary/tone mask: try several thresholds (the auto
+// alpha/luma mask plus a few luma levels) so a decodable image — including a
+// webp the browser decoded fine — essentially always yields a closed contour.
+function silhouetteByMask(rgba, w, h, baseTh, mainOnly) {
+  const modes = ['auto', 'luma', 'alpha'];
+  const ths = [baseTh == null ? 128 : baseTh, 96, 160, 64, 192];
+  for (const mo of modes) {
+    for (const th of ths) {
+      const { mask } = maskFromImageData(rgba, w, h, th, mo);
+      let loops = traceContours(mask, w, h);
+      if (!loops.length) continue;
+      if (mainOnly) loops = [loops.sort((a, b) => b.length - a.length)[0]];
+      return composePath(loops);
+    }
+  }
+  return [];
 }
 
 self.onmessage = async (e) => {
@@ -55,18 +73,15 @@ self.onmessage = async (e) => {
         path = composePath(loops);
       } else {
         // auto → proven Canny edge path (adaptive thresholds, never swallows a
-        // real photo); fall back to the auto mask ONLY if the edge path yields
-        // nothing usable (e.g. a clean transparent logo).
+        // real photo); fall back to a multi-threshold alpha/luma mask so a
+        // decodable image (incl. webp) nearly always yields a contour.
         path = photoContour(rgba, w, h, { threshold: th, mainOnly: !!mainOnly });
         if (!path.length) {
-          const { mask } = maskFromImageData(rgba, w, h, th, 'auto');
-          let loops = traceContours(mask, w, h);
-          if (!loops.length) throw new Error('no silhouette found');
-          if (mainOnly) loops = [loops.sort((a, b) => b.length - a.length)[0]];
-          path = composePath(loops);
+          path = silhouetteByMask(rgba, w, h, th, mainOnly);
         }
       }
       // Resample to a power-of-2 for the radix-2 FFT.
+      if (!path.length) throw new Error('empty or unreadable image');
       path = resample(path, nextPow2(Math.min(sample || 1024, 2048)));
       // FULL harmonic set for the RENDER (many harmonics → true contour, the
       // proven code's default). Keep the whole set so the contour is crisp.

@@ -272,6 +272,24 @@ function runWorker(msg, transfer) {
   });
 }
 
+// Decode an uploaded image file into an ImageBitmap, with an <img>+canvas
+// fallback (createImageBitmap rejects on some webp/svg). Returns { w, h }-aware
+// bitmap via a small wrapper so the caller can read size + draw.
+async function decodeImageBitmap(file) {
+  try {
+    if (typeof createImageBitmap === 'function') return await createImageBitmap(file);
+  } catch (e) { /* fall through to <img> decode */ }
+  const url = URL.createObjectURL(file);
+  try {
+    const im = new Image();
+    await new Promise((res, rej) => { im.onload = res; im.onerror = rej; im.src = url; });
+    const c = document.createElement('canvas');
+    c.width = im.naturalWidth; c.height = im.naturalHeight;
+    c.getContext('2d').drawImage(im, 0, 0);
+    try { return await createImageBitmap(c); } catch (e2) { return c; }  // canvas is drawable too
+  } finally { setTimeout(() => URL.revokeObjectURL(url), 3000); }
+}
+
 /* ---------------- transcription (.txt), lazy for decode ---------------- */
 function downloadTxt(name, text) {
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
@@ -602,7 +620,9 @@ imgfile.addEventListener('change', async () => {
   setStatus(waitMsg);
   try {
     const t0 = performance.now();
-    const bmp = await createImageBitmap(f);
+    // Decode the file robustly: createImageBitmap is fast but can reject on
+    // some webp/svg files; fall back to an <img> element + canvas.
+    const bmp = await decodeImageBitmap(f);
     const c = document.createElement('canvas');
     c.width = Math.min(bmp.width, 640); c.height = Math.min(bmp.height, 640);
     const cx = c.getContext('2d', { willReadFrequently: true });
@@ -634,7 +654,8 @@ imgfile.addEventListener('change', async () => {
       setStatus(`image → silhouette · wav ready (${Math.round(performance.now() - t0)}ms)`);
     } finally { delete alphabet[key]; }
   } catch (e) {
-    setStatus('silhouette failed');
+    // surface the worker's real reason (e.g. 'empty or unreadable image')
+    setStatus(e && e.message && /image|silhouette/.test(e.message) ? e.message : 'silhouette failed');
     console.error(e);
   } finally {
     imgBusy = false;
