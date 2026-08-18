@@ -170,6 +170,16 @@ textarea::-webkit-scrollbar-thumb { background: var(--dim2); border-radius: 3px;
   background: rgba(126, 97, 212, 0.06);
 }
 .action:disabled { opacity: 0.4; pointer-events: none; }
+/* image conversion in progress — pulsing waiting state */
+.action.busy {
+  opacity: 0.6;
+  pointer-events: none;
+  animation: sgf-pulse 1.1s ease-in-out infinite;
+}
+@keyframes sgf-pulse {
+  0%, 100% { box-shadow: 0 0 4px var(--ember-soft); border-color: var(--hair); }
+  50% { box-shadow: 0 0 16px var(--ember-soft); border-color: var(--ember); }
+}
 
 .status {
   position: fixed;

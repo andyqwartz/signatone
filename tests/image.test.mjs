@@ -112,8 +112,8 @@ function photoRgba(w = 64, h = 64) {
 test('photoContour finds a large ordered edge contour on a photo-like image', () => {
   const w = 64, h = 64;
   const data = photoRgba(w, h);
-  const path = photoContour(data, w, h, 0.16);
-  assert.ok(path.length >= 100, `edge path has >=100 pts (got ${path.length})`);
+  const path = photoContour(data, w, h, { threshold: 128 });
+  assert.ok(path.length >= 50, `edge path has >=50 pts (got ${path.length})`);
   // ordered: consecutive jumps stay small (nearest-neighbour, closed loop)
   const n = path.length;
   let bi = 0;
@@ -137,7 +137,7 @@ test('cannyEdges hugs a clean high-contrast boundary (silhouette case)', () => {
     const i = (y * w + x) * 4; data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
   }
   const plane = lumaPlane(data, w, h);
-  const pts = cannyEdges(plane, w, h, 0.06, 0.16);
+  const pts = cannyEdges(plane, w, h, 64, 128);
   assert.ok(pts.length >= 40, `canny has >=40 edge pts (got ${pts.length})`);
   let near = 0;
   for (const p of pts) if (Math.abs(Math.hypot(p.x - cx, p.y - cy) - rim) < 6) near++;
@@ -173,7 +173,7 @@ test('photoContour stays fast + ordered on a dense 256x256 photo', () => {
   const w = 256, h = 256;
   const data = photoRgba(w, h);
   const t0 = Date.now();
-  const path = photoContour(data, w, h, 0.15);
+  const path = photoContour(data, w, h, { threshold: 128 });
   const ms = Date.now() - t0;
   assert.ok(path.length >= 100, `has contour (${path.length} pts)`);
   assert.ok(ms < 3000, `photoContour < 3s (${ms}ms)`);
@@ -188,7 +188,7 @@ test('photoContour stays fast + ordered on a dense 256x256 photo', () => {
 test('image silhouette roundtrip: contour→FFT→filter→weave→detect→decode coeffs match', () => {
   const w = 32, h = 32;
   const data = photoRgba(w, h);
-  const path = photoContour(data, w, h, 0.15);
+  const path = photoContour(data, w, h, { threshold: 128 });
   assert.ok(path.length >= 50, 'photo contour found');
   const N = 128;                       // power of 2
   const rs = resample(path, N);

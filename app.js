@@ -57,7 +57,7 @@ function loadSettings() {
   const def = { harmonics: 10, noise: 0, seed: 12345, speed: 1, spacing: 1.7, single: 14,
     accent: '#7e61d4', theme: 'night', stroke: 0.6, glowAmt: 10,
     audioGain: 1, audioTempo: 1, audioVol: 1, audioTempo2: 1,
-    imgThreshold: 128, imgSample: 1024, imgHarms: 1024, imgMode: 'auto', imgMain: false };
+    imgThreshold: 128, imgSample: 1024, imgHarms: 1024, imgMode: 'auto', imgMain: true };
   try { return Object.assign(def, JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}); }
   catch { return def; }
 }
@@ -532,11 +532,21 @@ btnImgOpt.addEventListener('click', (e) => { e.stopPropagation(); openPanel(imgP
 // image -> silhouette -> epicycles (render) + single-block WAV (decodable)
 // (the α Image control is a <label> wrapping #imgfile — native tap opens the picker,
 //  avoiding the iOS display:none + .click() failure)
+// Conversion runs in a Web Worker, so the text/encode/decode UI stays fully
+// usable while it cooks. We enforce ONE image at a time and show a waiting
+// state; the result then renders dominant (single full-frame silhouette).
+let imgBusy = false;
 imgfile.addEventListener('change', async () => {
   const f = imgfile.files[0];
   if (!f) return;
-  setStatus('silhouette…');
+  if (imgBusy) { setStatus('image already converting…'); imgfile.value = ''; return; }
+  imgBusy = true;
+  const btn = btnImg ? btnImg : null;
+  if (btn) btn.classList.add('busy');
+  const waitMsg = 'converting image…';
+  setStatus(waitMsg);
   try {
+    const t0 = performance.now();
     const bmp = await createImageBitmap(f);
     const c = document.createElement('canvas');
     c.width = Math.min(bmp.width, 640); c.height = Math.min(bmp.height, 640);
@@ -565,11 +575,15 @@ imgfile.addEventListener('change', async () => {
         opts: { harmonics: Math.min(alphabet[key].length, 512), noise: 0, seed: 0, preImage: true } });
       lastWavBuf = encodeWav(samples, SGFConfig.sampleRate);
       showDock();
-      setStatus('image → silhouette · wav ready');
+      setStatus(`image → silhouette · wav ready (${Math.round(performance.now() - t0)}ms)`);
     } finally { delete alphabet[key]; }
   } catch (e) {
     setStatus('silhouette failed');
     console.error(e);
+  } finally {
+    imgBusy = false;
+    if (btn) btn.classList.remove('busy');
+    imgfile.value = '';
   }
 });
 

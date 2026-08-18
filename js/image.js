@@ -212,20 +212,20 @@ export function sobelMagnitude(plane, w, h) {
 
 // Canny edge detection — faithful port of the proven `fourier_visualization.py`
 // pipeline (Gaussian blur → Sobel magnitude+angle → non-max suppression →
-// double threshold + hysteresis). The old path used a SINGLE Sobel ratio
-// (`strongEdges`) which caught interior texture → noisy, unreadable contours.
-// Canny yields clean 1-px connected boundaries that order into a true outline.
-export function cannyEdges(plane, w, h, tLow = 0.06, tHigh = 0.16) {
+// double threshold + hysteresis) using ABSOLUTE thresholds on the 0–255 luma
+// plane, exactly as cv2.Canny(100, 200). The earlier code used RATIOS of the
+// max gradient, which shifted the result per-image and missed/hit the wrong
+// edges. Returns clean 1-px connected boundary pixels.
+export function cannyEdges(plane, w, h, tLow = 100, tHigh = 200) {
   const b = gaussianBlur(plane, w, h);
   // Sobel gradient magnitude + direction (rounded to 4 compass angles)
   const mag = new Float32Array(w * h);
   const dir = new Int8Array(w * h);
-  let maxg = 0;
   for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
     const p = (yy, xx) => b[yy * w + xx];
     const gx = -p(y-1,x-1) - 2*p(y,x-1) - p(y+1,x-1) + p(y-1,x+1) + 2*p(y,x+1) + p(y+1,x+1);
     const gy = -p(y-1,x-1) - 2*p(y-1,x) - p(y-1,x+1) + p(y+1,x-1) + 2*p(y+1,x) + p(y+1,x+1);
-    const m = Math.sqrt(gx*gx + gy*gy); mag[y*w+x] = m; if (m > maxg) maxg = m;
+    const m = Math.sqrt(gx*gx + gy*gy); mag[y*w+x] = m;
     // angle in 4 bins: 0°(E-W), 45(SE-NW), 90(N-S), 135(SW-NE). Angle = atan2(gy,gx).
     const ang = Math.atan2(gy, gx) * 180 / Math.PI;           // [-180,180]
     const a = ((ang < -157.5 || ang >= 157.5) || (ang >= -22.5 && ang < 22.5)) ? 0
@@ -234,13 +234,11 @@ export function cannyEdges(plane, w, h, tLow = 0.06, tHigh = 0.16) {
             : 135;
     dir[y*w+x] = a;
   }
-  const norm = maxg || 1;
-  const lo = tLow * norm, hi = tHigh * norm;
   const nms = new Uint8Array(w * h);   // 0=suppressed 1=strong 2=weak
   const inb = (y, x) => y >= 0 && y < h && x >= 0 && x < w;
   for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
     const m = mag[y*w+x];
-    if (m < lo) continue;
+    if (m < tLow) continue;
     let n1 = 0, n2 = 0;
     switch (dir[y*w+x]) {
       case 0:  n1 = mag[y*w+x-1] > m ? 1 : 0; n2 = mag[y*w+x+1] > m ? 1 : 0; break;
@@ -249,7 +247,7 @@ export function cannyEdges(plane, w, h, tLow = 0.06, tHigh = 0.16) {
       case 135:n1 = mag[(y-1)*w+x-1] > m ? 1 : 0; n2 = mag[(y+1)*w+x+1] > m ? 1 : 0; break;
     }
     if (n1 || n2) continue;                       // not a local max → suppressed
-    nms[y*w+x] = m >= hi ? 1 : 2;                 // strong vs weak
+    nms[y*w+x] = m >= tHigh ? 1 : 2;              // strong vs weak
   }
   // Hysteresis: keep weak pixels 8-connected to a strong pixel (flood fill).
   const out = new Uint8Array(w * h);
@@ -281,11 +279,15 @@ export function strongEdges(g, w, h, ratio = 0.15) {
 // Greedy nearest-neighbour ordering of edge pixels, accelerated with a
 // spatial grid (cell = 8px) so lookup is O(N · cells) instead of O(N²).
 // Splits into separate cycles when the nearest candidate jumps > 10px
-// (exact Fourier-Epicycles `prepare_image` parity), then concatenates ALL
-// cycles back into one ordered polyline and centres it (same result as the
-// original greedy ordering, just much faster and with cycle-splitting to
-// avoid long image-crossing lines).
-export function edgeToPath(pts) {
+// (exact Fourier-Epicycles `prepare_image` parity). Each cycle is one
+// connected outline (outer boundary, interior holes, separate objects).
+//   mainOnly=true  → return ONLY the longest cycle (the subject's outer
+//                    outline). This is the proven `main_curve_only` default:
+//                    concatenating every disconnected edge draws cross-image
+//                    jump lines = the "gibberish" the user reported.
+//   mainOnly=false → concatenate ALL cycles into one ordered polyline.
+// Returns centred points (coords -= centroid, as in the proven code).
+export function edgeToPath(pts, mainOnly = false) {
   if (!pts.length) return [];
   const CELL = 8;
   const grid = new Map();
@@ -324,32 +326,44 @@ export function edgeToPath(pts) {
     }
     if (cycle.length >= 3) cycles.push(cycle);
   }
-  // Concatenate ALL cycles into one ordered polyline (same as the original
-  // greedy ordering, just faster). Then centre the whole path.
-  const all = [];
-  for (const c of cycles) for (const p of c) all.push(p);
-  if (!all.length) return [];
-  let sx = 0, sy = 0; for (const p of all) { sx += p.x; sy += p.y; }
-  const n = all.length, cxm = sx / n, cym = sy / n;
-  return all.map(p => ({ x: p.x - cxm, y: p.y - cym }));
+  if (!cycles.length) return [];
+  // main_curve_only: keep the longest cycle (single clean outline).
+  let sel;
+  if (mainOnly) {
+    let best = null;
+    for (const c of cycles) if (!best || c.length > best.length) best = c;
+    sel = best;
+  } else {
+    sel = [];
+    for (const c of cycles) for (const p of c) sel.push(p);
+  }
+  let sx = 0, sy = 0; for (const p of sel) { sx += p.x; sy += p.y; }
+  const n = sel.length, cxm = sx / n, cym = sy / n;
+  return sel.map(p => ({ x: p.x - cxm, y: p.y - cym }));
 }
 
 // Full photo silhouette: RGBA -> centred ordered edge polyline.
-// Uses Canny (hysteresis) for clean 1-px boundaries — the proven
-// Fourier-Epicycles approach — with a fallback to the Sobel-ratio path if the
-// Canny threshold leaves too few points. Decimates dense edge sets (~2000 pts
-// cap) so ordering stays fast.
-export function photoContour(data, w, h, edgeRatio = 0.16) {
+// Uses Canny (hysteresis, ABSOLUTE thresholds = cv2.Canny parity) for clean
+// 1-px boundaries — the proven Fourier-Epicycles approach — with a fallback to
+// the Sobel-ratio path if the Canny threshold leaves too few points.
+//   mainOnly=true (default): keep the longest cycle → one true outline.
+// Decimates dense edge sets (~2000 pts cap) so ordering stays fast.
+export function photoContour(data, w, h, opts = {}) {
+  const threshold = opts.threshold ?? 128;
+  // cv2.Canny(100, 200) uses a 1:2 low:high ratio; drive the high threshold
+  // from the user slider (default 128 → low 64 / high 128, close to proven).
+  const high = Math.max(40, Math.min(255, threshold));
+  const low = Math.max(20, Math.floor(high / 2));
+  const mainOnly = opts.mainOnly ?? true;
   const plane = lumaPlane(data, w, h);
-  let pts = cannyEdges(plane, w, h, edgeRatio * 0.38, edgeRatio);
-  // Too few with high hysteresis → relax thresholds toward the old single-ratio path.
-  if (pts.length < 30) {
-    const mag = sobelMagnitude(plane, w, h);
-    pts = strongEdges(mag, w, h, edgeRatio);
+  let pts = cannyEdges(plane, w, h, low, high);
+  // Too few with high hysteresis → relax toward a lower absolute threshold.
+  if (pts.length < 30 && high > 60) {
+    pts = cannyEdges(plane, w, h, Math.floor(high / 2), high);
   }
   if (pts.length > 2000) {                    // cap the ordering cost
     const step = Math.ceil(pts.length / 2000);
     pts = pts.filter((_, i) => i % step === 0);
   }
-  return edgeToPath(pts);
+  return edgeToPath(pts, mainOnly);
 }

@@ -2,10 +2,10 @@
 //   {type:'weave', text, opts}            -> {type:'weave', samples}
 //   {type:'decode', buffer}               -> {type:'decode', blocks:[{coeffs}]}
 
-import { weaveBlocks } from './weaver.js?v=20260818a';
-import { analyzeBlocks, detectKind } from './seer.js?v=20260818a';
-import { decodeWavToFloat32 } from './wav.js?v=20260818a';
-import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js?v=20260818a';
+import { weaveBlocks } from './weaver.js?v=20260818b';
+import { analyzeBlocks, detectKind } from './seer.js?v=20260818b';
+import { decodeWavToFloat32 } from './wav.js?v=20260818b';
+import { maskFromImageData, traceContours, composePath, resample, pathToCoeffs, photoContour, filterDecodable } from './image.js?v=20260818b';
 
 let alphabet = null;
 function nextPow2(n) { let p = 1; while (p < n) p <<= 1; return p; }
@@ -36,7 +36,7 @@ self.onmessage = async (e) => {
       let path = null;
       // 1) edge-based path (proven Canny + nearest-neighbour) works for
       //    real photos; fall back to the alpha/luma region mask for clean silhouettes.
-      const edge = photoContour(rgba, w, h, 0.16);
+      const edge = photoContour(rgba, w, h, { threshold: threshold == null ? 128 : threshold, mainOnly: !!mainOnly });
       const EDGE_MIN = 64;
       if (edge.length >= EDGE_MIN) {
         path = edge;
